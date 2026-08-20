@@ -1,3 +1,5 @@
+
+
 import os
 import re
 import asyncio
@@ -26,14 +28,14 @@ bot = CountingBot()
 TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
 
-# Core bot IDs
+
 COUNTING_BOT_ID = 510016054391734273        # Official Counting Bot ID
 CLASSIC_BOT_ID = 639599059036012605          # Classic Counting Bot ID
 
 # Fetch numeric channel settings from your Railway Environment Strings
 c1 = str(os.getenv('c1')).strip()            # Regular Counting Channel (Locked by default, open to 25k)
 c2 = str(os.getenv('c2')).strip()            # Classic Counting Channel (Locked by default, open to 25kc)
-c3 = str(os.getenv('c3')).strip()            # The dedicated stats command channel
+c3 = str(os.getenv('c3')).strip()            # The dedicated stats command channel (#c-command)
 
 # Group game rooms for the 14-day tournament pool evaluation
 COUNTING_CHANNELS = [c1, c2]
@@ -118,7 +120,7 @@ async def check_and_announce_winners():
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}})
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}! 3-Channel optimization network active.')
+    print(f'Logged in as {bot.user.name}! 3-Channel system is fully active.')
     get_tournament_deadline()
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
@@ -132,13 +134,14 @@ async def on_message(message):
     if current_channel_str == c3 and message.embeds:
         embed = message.embeds[0]
         username = None
+        
+        # Pull the target nickname securely from the embed title/author block
         if embed.author and embed.author.name:
             username = embed.author.name
         elif embed.title:
             username = embed.title
 
         if not username: return
-        content = f"{embed.description or ''} " + " ".join([f.value for f in embed.fields])
         guild = message.guild
         member = discord.utils.get(guild.members, name=username) or discord.utils.get(guild.members, display_name=username)
         
@@ -149,9 +152,23 @@ async def on_message(message):
                     break
         if not member: return
 
+        # Loop through fields individually to look directly inside the "Global Stats" text block
+        global_stats_text = ""
+        for field in embed.fields:
+            if "Global Stats" in field.name:
+                global_stats_text = field.value
+                break
+
+        # If Global Stats column wasn't in the fields, fallback check description text
+        if not global_stats_text and embed.description:
+            if "Global Stats" in embed.description:
+                global_stats_text = embed.description
+
+        if not global_stats_text: return
+
         # Target 1: Official Counting Bot (Pure Numbers & C1 Reward Access)
         if message.author.id == COUNTING_BOT_ID:
-            match = re.search(r'Global Stats.*?Score:\s*([\d,]+)', content, re.DOTALL)
+            match = re.search(r'Score:\s*([\d,]+)', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
                 target_role = None
@@ -171,14 +188,14 @@ async def on_message(message):
                     if role not in member.roles:
                         if removals: await member.remove_roles(*removals)
                         await member.add_roles(role)
-                        msg = await message.channel.send(f"🎉 {member.mention} has been updated to the **{target_role}** tier!")
+                        msg = await message.channel.send(f"🎉 {member.mention} has been updated to the **{target_role}** tier! (Score: {score:,})")
                         await asyncio.sleep(10)
                         try: await message.delete(); await msg.delete()
                         except: pass
 
         # Target 2: Classic Counting Bot (Suffix "c" & C2 Reward Access)
         elif message.author.id == CLASSIC_BOT_ID:
-            match = re.search(r'Global Stats.*?Score:\s*([\d,]+)', content, re.DOTALL)
+            match = re.search(r'Score:\s*([\d,]+)', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
                 target_role = None
@@ -198,7 +215,7 @@ async def on_message(message):
                     if role not in member.roles:
                         if removals: await member.remove_roles(*removals)
                         await member.add_roles(role)
-                        msg = await message.channel.send(f"🎉 {member.mention} has been updated to the Classic **{target_role}** tier!")
+                        msg = await message.channel.send(f"🎉 {member.mention} has been updated to the Classic **{target_role}** tier! (Score: {score:,})")
                         await asyncio.sleep(10)
                         try: await message.delete(); await msg.delete()
                         except: pass
