@@ -10,7 +10,8 @@ from datetime import datetime, timedelta, timezone
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix=["!", "r!"], intents=intents)
+# UNIFIED CONFIGURATION: The bot now ONLY listens to the r! prefix for all commands
+bot = commands.Bot(command_prefix="r!", intents=intents)
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
@@ -96,7 +97,7 @@ async def check_and_announce_winners():
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}! Racing & Tournament frameworks operational.')
+    print(f'Logged in as {bot.user.name}! Racing & Tournament frameworks operational with r! prefix.')
     get_tournament_deadline()
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
@@ -114,6 +115,7 @@ async def on_message(message):
 
     content = message.content.strip()
 
+    # Skip processing counting math if the text is an explicit r! command
     if content.startswith('r!'):
         return
 
@@ -157,7 +159,7 @@ async def on_message(message):
     if race:
         log_race_contribution(current_channel_id_str, message.author.id)
 # ==============================================================================
-# RACING COMMAND ENGINE (Prefix: r!)
+# RACING & TOURNAMENT COMMAND ENGINE (Prefix: r!)
 # ==============================================================================
 
 @bot.command(name='race')
@@ -210,7 +212,7 @@ async def stop_race(ctx):
     
     if players:
         mvp_id = max(players, key=players.get)
-        sorted_players = sorted(players.items(), key=lambda item: item[1], reverse=True)
+        sorted_players = sorted(players.items(), key=lambda item: item, reverse=True)
         leaderboard_text = ""
         for index, (p_id, p_counts) in enumerate(sorted_players[:5]):
             p_pace = round(p_counts / duration_hours, 1)
@@ -277,7 +279,6 @@ async def view_top_races(ctx):
     if str(ctx.channel.id) in COUNTING_CHANNELS:
         return
 
-    # Fetch Top 10 historical entries sorted by highest pace speed record
     records = list(top_races_collection.find().sort("pace", -1).limit(10))
 
     embed = discord.Embed(title="🏆 All-Time Top 10 Fastest Races Leaderboard", color=discord.Color.purple())
@@ -304,6 +305,7 @@ async def view_top_races(ctx):
 
 @bot.command(name='leaderboard')
 async def leaderboard(ctx):
+    """Displays the standard top 10 global leaderboard combining both channels (Prefix: r!leaderboard)."""
     if str(ctx.channel.id) in COUNTING_CHANNELS:
         return  
 
