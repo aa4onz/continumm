@@ -16,7 +16,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
-c1 = os.gentenv('c1')
+c1 = os.getenv('c1')
 c2 = os.getenv('c2')
 
 # ADD YOUR TWO CHANNEL IDs HERE (Keep them as integers)
