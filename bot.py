@@ -17,8 +17,8 @@ MONGO_URI = os.getenv('MONGO_URI')
 
 # Safely parse strings from Railway variables into integers for Discord compatibility
 try:
-    c1 = int(os.getenv('c1'))
-    c2 = int(os.getenv('c2'))
+    c1 = int(str(os.getenv('c1')).strip())
+    c2 = int(str(os.getenv('c2')).strip())
     COUNTING_CHANNELS = [c1, c2]
 except (TypeError, ValueError) as e:
     print(f"Error parsing channel environment variables c1 or c2: {e}")
