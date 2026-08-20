@@ -10,12 +10,12 @@ from datetime import datetime, timedelta, timezone
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+# Listen to ! for tournaments and r! for local channel racing metrics
+bot = commands.Bot(command_prefix=["!", "r!"], intents=intents)
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
 
-# Keep these as clean strings to guarantee a perfect text match with Railway variables
 c1 = str(os.getenv('c1')).strip()
 c2 = str(os.getenv('c2')).strip()
 COUNTING_CHANNELS = [c1, c2]
@@ -23,8 +23,9 @@ COUNTING_CHANNELS = [c1, c2]
 try:
     mongo_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
     db = mongo_client["counting_bot_db"]
-    leaderboard_collection = db["leaderboard"]  # Stores combined global user scores
-    system_collection = db["system_state"]       # Stores global tournament timer
+    leaderboard_collection = db["leaderboard"]       # 14-Day Global Scores
+    system_collection = db["system_state"]           # Global tournament timer
+    races_collection = db["active_races"]             # Live racing contexts
     print(f"Connected to MongoDB Atlas! Tracking channels: {COUNTING_CHANNELS}")
 except Exception as e:
     print(f"Failed to connect to MongoDB: {e}")
@@ -33,7 +34,6 @@ except Exception as e:
 scheduler = AsyncIOScheduler()
 
 def get_tournament_deadline():
-    """Fetches or initializes the global 14-day tournament timer using timezone-aware UTC."""
     timer = system_collection.find_one({"_id": "global_tournament"})
     if not timer:
         deadline = datetime.now(timezone.utc) + timedelta(days=14)
@@ -43,18 +43,22 @@ def get_tournament_deadline():
     return timer
 
 def increment_global_score(user_id):
-    """Adds +1 to a user's total score combined across channels."""
     leaderboard_collection.update_one(
-        {"_id": str(user_id)},  # Store as string for clean DB rendering
+        {"_id": str(user_id)},  
         {"$inc": {"correct_counts": 1}},
         upsert=True
     )
 
+def log_race_contribution(channel_id, user_id):
+    """Safely records user performance scores unique to an active channel race."""
+    races_collection.update_one(
+        {"_id": f"race_{channel_id}"},
+        {"$inc": {f"players.{user_id}": 1, "total_counts": 1}}
+    )
+
 async def check_and_announce_winners():
-    """Checks the global 14-day timer and announces the absolute winner to both channels."""
     timer = get_tournament_deadline()
     deadline = timer.get("end_date")
-    
     if deadline.tzinfo is None:
         deadline = deadline.replace(tzinfo=timezone.utc)
 
@@ -85,7 +89,6 @@ async def check_and_announce_winners():
             continue
 
     leaderboard_collection.delete_many({})
-    
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one(
         {"_id": "global_tournament"},
@@ -94,24 +97,27 @@ async def check_and_announce_winners():
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}! Global tracking is active.')
+    print(f'Logged in as {bot.user.name}! Racing & Tournament frameworks operational.')
     get_tournament_deadline()
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
 
 @bot.event
 async def on_message(message):
-    # Convert active message channel ID to string to match the environment variables perfectly
-    current_channel_id_str = str(message.channel.id)
+    await bot.process_commands(message)
 
+    current_channel_id_str = str(message.channel.id)
     if current_channel_id_str not in COUNTING_CHANNELS:
-        await bot.process_commands(message)
         return
 
     if message.author.bot:
         return
 
     content = message.content.strip()
+
+    # Skip validation logic completely if it's an explicit race manager command
+    if content.startswith('r!'):
+        return
 
     try:
         input_number = int(content)
@@ -124,7 +130,6 @@ async def on_message(message):
     previous_number = 0
     last_user_id = None
 
-    # Scan back through messages to find the baseline sequence number
     async for msg in channel.history(limit=20):
         if msg.id == message.id:
             continue
@@ -142,23 +147,126 @@ async def on_message(message):
 
     expected_number = previous_number + 1
 
-    # Rule 1: No double counting
     if message.author.id == last_user_id:
         return
 
-    # Rule 2: Sequence check
     if input_number != expected_number:
         return
 
-    # Everything matches! Update MongoDB leaderboard
+    # Valid Count Processed: Update 14-day global score
     increment_global_score(message.author.id)
+
+    # Active Race Check: If this specific channel has an active race, count it!
+    race = races_collection.find_one({"_id": f"race_{current_channel_id_str}"})
+    if race:
+        log_race_contribution(current_channel_id_str, message.author.id)
+# ==============================================================================
+# RACING COMMAND ENGINE (Prefix: r!)
+# ==============================================================================
+
+@bot.command(name='race')
+async def start_race(ctx):
+    """Starts a clean, local speed track session isolated to the active channel."""
+    channel_id_str = str(ctx.channel.id)
+    if channel_id_str not in COUNTING_CHANNELS:
+        await ctx.send("❌ Racing tracks can only be initialized inside designated counting channels.")
+        return
+
+    existing_race = races_collection.find_one({"_id": f"race_{channel_id_str}"})
+    if existing_race:
+        await ctx.send("🏁 A race track session is already running inside this channel! Type `r!pace` to view performance metrics.")
+        return
+
+    races_collection.insert_one({
+        "_id": f"race_{channel_id_str}",
+        "channel_id": channel_id_str,
+        "start_time": datetime.now(timezone.utc),
+        "total_counts": 0,
+        "players": {}
+    })
+    await ctx.send(f"🟢 **The Race has officially begun in <#{channel_id_str}>!** Drop sequential numbers fast to increase your counts/hr speed track!")
+
+
+@bot.command(name='stop')
+async def stop_race(ctx):
+    """Stops the active room's track session and renders final speed stats."""
+    channel_id_str = str(ctx.channel.id)
+    if channel_id_str not in COUNTING_CHANNELS:
+        return
+
+    race = races_collection.find_one({"_id": f"race_{channel_id_str}"})
+    if not race:
+        await ctx.send("❌ There is no active race running inside this channel to stop.")
+        return
+
+    start_time = race["start_time"].replace(tzinfo=timezone.utc)
+    duration_hours = (datetime.now(timezone.utc) - start_time).total_seconds() / 3600.0
+    duration_hours = max(duration_hours, 0.0001) # Avoid division by zero
+    
+    total_counts = race.get("total_counts", 0)
+    final_pace = round(total_counts / duration_hours, 1)
+
+    embed = discord.Embed(title=f"🛑 Race Finished — #{ctx.channel.name}", color=discord.Color.red())
+    embed.description = f"**Final Room Pace:** `{final_pace} counts/hr`\n**Total Numbers Dropped:** `{total_counts}`"
+    
+    players = race.get("players", {})
+    if players:
+        sorted_players = sorted(players.items(), key=lambda item: item[1], reverse=True)
+        leaderboard_text = ""
+        for index, (p_id, p_counts) in enumerate(sorted_players[:5]):
+            p_pace = round(p_counts / duration_hours, 1)
+            leaderboard_text += f"`#{index+1}` <@{p_id}> — {p_counts} drops ({p_pace}/hr)\n"
+        embed.add_field(name="🏆 Top Contributors", value=leaderboard_text, inline=False)
+
+    races_collection.delete_one({"_id": f"race_{channel_id_str}"})
+    await ctx.send(embed=embed)
+
+
+@bot.command(name='pace')
+async def view_pace(ctx):
+    """Displays real-time speed track performance. Pulls both metrics together if multiple races run."""
+    active_races = list(races_collection.find())
+    
+    if not active_races:
+        await ctx.send("ℹ️ No active races are running right now. Type `r!race` inside a counting channel to start one!")
+        return
+
+    embed = discord.Embed(title="⚡ Live Race Track Pace Metrics", color=discord.Color.teal())
+    
+    for race in active_races:
+        ch_id = race["channel_id"]
+        start_time = race["start_time"].replace(tzinfo=timezone.utc)
+        
+        elapsed_hours = (datetime.now(timezone.utc) - start_time).total_seconds() / 3600.0
+        elapsed_hours = max(elapsed_hours, 0.0001) 
+        
+        total_counts = race.get("total_counts", 0)
+        current_pace = round(total_counts / elapsed_hours, 1)
+        
+        players = race.get("players", {})
+        top_driver = "None"
+        if players:
+            mvp_id = max(players, key=players.get)
+            top_driver = f"<@{mvp_id}> ({players[mvp_id]} drops)"
+
+        field_value = (
+            f"• **Current Speed:** `{current_pace} counts/hr`\n"
+            f"• **Total Drops:** `{total_counts}`\n"
+            f"• **Top Contributor:** {top_driver}"
+        )
+        
+        channel_obj = bot.get_channel(int(ch_id))
+        ch_name = channel_obj.name if channel_obj else f"ID: {ch_id}"
+        embed.add_field(name=f"🏁 Channel: #{ch_name}", value=field_value, inline=False)
+        
+    await ctx.send(embed=embed)
 
 
 @bot.command(name='leaderboard')
 async def leaderboard(ctx):
-    """Displays the top 10 global leaderboard combining both channels."""
+    """Displays the standard top 10 global leaderboard combining both channels (Prefix: !leaderboard)."""
     if str(ctx.channel.id) in COUNTING_CHANNELS:
-        return
+        return  
 
     top_users = list(leaderboard_collection.find().sort("correct_counts", -1).limit(10))
     timer = get_tournament_deadline()
