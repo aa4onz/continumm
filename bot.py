@@ -10,7 +10,6 @@ from datetime import datetime, timedelta, timezone
 intents = discord.Intents.default()
 intents.message_content = True
 
-# UNIFIED CONFIGURATION: The bot now ONLY listens to the r! prefix for all commands
 bot = commands.Bot(command_prefix="r!", intents=intents)
 
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -97,7 +96,7 @@ async def check_and_announce_winners():
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}! Racing & Tournament frameworks operational with r! prefix.')
+    print(f'Logged in as {bot.user.name}! Operational with automatic emergency channel locking features.')
     get_tournament_deadline()
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
@@ -110,12 +109,22 @@ async def on_message(message):
     if current_channel_id_str not in COUNTING_CHANNELS:
         return
 
+    # Check if a premium counting bot sent the guild save alert text anywhere in the channel
+    # We do NOT ignore bots here so we can see the save message sent by other bots
+    if "You have used 1 guild save!" in message.content:
+        try:
+            # Overwrite everyone permission to lock the room instantly
+            await message.channel.set_permissions(message.guild.default_role, send_messages=False)
+            await message.channel.send("🔒 **Channel Locked!** A guild save was used. Please contact an Administrator to review and unlock (`r!unlock`).")
+        except Exception as e:
+            print(f"Failed to lock channel: {e}")
+        return
+
     if message.author.bot:
         return
 
     content = message.content.strip()
 
-    # Skip processing counting math if the text is an explicit r! command
     if content.startswith('r!'):
         return
 
@@ -187,7 +196,7 @@ async def start_race(ctx):
 
 @bot.command(name='stop')
 async def stop_race(ctx):
-    """Stops the active room's track session and records its pace if it ranks in the Top 10."""
+    """Stops the active room's track session and records its pace. Renders the top two MVPs."""
     channel_id_str = str(ctx.channel.id)
     if channel_id_str not in COUNTING_CHANNELS:
         return
@@ -208,24 +217,30 @@ async def stop_race(ctx):
     embed.description = f"**Final Room Pace:** `{final_pace} counts/hr`\n**Total Numbers Dropped:** `{total_counts}`"
     
     players = race.get("players", {})
-    mvp_id = None
+    mvp_list = []
     
     if players:
-        mvp_id = max(players, key=players.get)
-        sorted_players = sorted(players.items(), key=lambda item: item, reverse=True)
+        # Sort players by their counts descending to find the top two counters
+        sorted_players = sorted(players.items(), key=lambda item: item[1], reverse=True)
+        
+        # Pull the top 2 users safely
+        for user_id, counts in sorted_players[:2]:
+            mvp_list.append({"id": user_id, "score": counts})
+            
         leaderboard_text = ""
         for index, (p_id, p_counts) in enumerate(sorted_players[:5]):
             p_pace = round(p_counts / duration_hours, 1)
             leaderboard_text += f"`#{index+1}` <@{p_id}> — {p_counts} drops ({p_pace}/hr)\n"
-        embed.add_field(name="🏆 Top Contributors", value=leaderboard_text, inline=False)
+        embed.add_field(name="🏆 Contributor Standings", value=leaderboard_text, inline=False)
 
-    # Save to top permanent records if total counts exist
+    # Save to permanent history records
     if total_counts > 0:
         top_races_collection.insert_one({
             "pace": final_pace,
             "total_counts": total_counts,
             "channel_name": ctx.channel.name,
-            "mvp_id": mvp_id,
+            "mvp1_id": mvp_list[0]["id"] if len(mvp_list) > 0 else None,
+            "mvp2_id": mvp_list[1]["id"] if len(mvp_list) > 1 else None,
             "timestamp": datetime.now(timezone.utc)
         })
 
@@ -235,7 +250,7 @@ async def stop_race(ctx):
 
 @bot.command(name='pace')
 async def view_pace(ctx):
-    """Displays real-time speed track performance for live running races."""
+    """Displays real-time speed track performance for live running races, showing up to two MVPs."""
     active_races = list(races_collection.find())
     
     if not active_races:
@@ -255,15 +270,19 @@ async def view_pace(ctx):
         current_pace = round(total_counts / elapsed_hours, 1)
         
         players = race.get("players", {})
-        top_driver = "None"
+        mvp_display = "None"
+        
         if players:
-            mvp_id = max(players, key=players.get)
-            top_driver = f"<@{mvp_id}> ({players[mvp_id]} drops)"
+            sorted_players = sorted(players.items(), key=lambda item: item[1], reverse=True)
+            if len(sorted_players) >= 2:
+                mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} drops)\n2. <@{sorted_players[1][0]}> ({sorted_players[1][1]} drops)"
+            else:
+                mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} drops)"
 
         field_value = (
             f"• **Current Speed:** `{current_pace} counts/hr`\n"
             f"• **Total Drops:** `{total_counts}`\n"
-            f"• **Top Contributor:** {top_driver}"
+            f"• **Top 2 Counters:**\n{mvp_display}"
         )
         
         channel_obj = bot.get_channel(int(ch_id))
@@ -275,7 +294,7 @@ async def view_pace(ctx):
 
 @bot.command(name='topbox')
 async def view_top_races(ctx):
-    """Displays a permanent high-score board showing the Top 10 fastest races in server history."""
+    """Displays a permanent high-score board showing the Top 10 fastest races in server history with two MVPs."""
     if str(ctx.channel.id) in COUNTING_CHANNELS:
         return
 
@@ -292,20 +311,39 @@ async def view_top_races(ctx):
             pace = record.get("pace", 0.0)
             counts = record.get("total_counts", 0)
             ch_name = record.get("channel_name", "unknown")
-            mvp_id = record.get("mvp_id")
+            mvp1 = record.get("mvp1_id")
+            mvp2 = record.get("mvp2_id")
             
             rank = medals[index] if index < 3 else f"`#{index + 1}`"
-            mvp_text = f"<@{mvp_id}>" if mvp_id else "No MVP"
             
-            leaderboard_text += f"{rank} **{pace} counts/hr** — #{ch_name} ({counts} drops) | MVP: {mvp_text}\n"
+            mvp_text = f"<@{mvp1}>" if mvp1 else "None"
+            if mvp2:
+                mvp_text += f" & <@{mvp2}>"
+                
+            leaderboard_text += f"{rank} **{pace} counts/hr** — #{ch_name} ({counts} drops) | MVPs: {mvp_text}\n"
         embed.description = leaderboard_text
 
     await ctx.send(embed=embed)
 
 
+@bot.command(name='unlock')
+@commands.has_permissions(administrator=True)
+async def unlock_channel(ctx):
+    """Admin command to safely unlock a counting channel after an emergency guild save lockdown."""
+    if str(ctx.channel.id) not in COUNTING_CHANNELS:
+        await ctx.send("❌ This command can only be used inside a designated counting channel.")
+        return
+        
+    try:
+        # Restore everyone's view and message sending capabilities
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=None)
+        await ctx.send("🔓 **Channel Unlocked!** Users can resume counting normally.")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to reset permissions: {e}")
+
+
 @bot.command(name='leaderboard')
 async def leaderboard(ctx):
-    """Displays the standard top 10 global leaderboard combining both channels (Prefix: r!leaderboard)."""
     if str(ctx.channel.id) in COUNTING_CHANNELS:
         return  
 
