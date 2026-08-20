@@ -129,8 +129,8 @@ async def check_and_announce_winners():
                 winner_id = top_user.get("_id")
                 winner_score = top_user.get("correct_counts", 0)
                 embed = discord.Embed(
-                    title="🎉 Tournament Ended! 🎉",
-                    description=f"The 14-day global counting cycle is complete!\n\n👑 **Global Winner:** <@{winner_id}> with a total score of **{winner_score}** combined points!",
+                    title="14days game ended",
+                    description=f"👑**Winner:** <@{winner_id}> score **{winner_score}**. ty for counting!",
                     color=discord.Color.gold()
                 )
                 await channel.send(embed=embed)
@@ -260,7 +260,7 @@ async def on_message(message):
     if "You have used 1 guild save!" in message.content:
         try:
             await message.channel.set_permissions(message.guild.default_role, send_messages=False)
-            await message.channel.send("🔒 **Channel Locked!** A guild save was used. Contact an Admin to unlock (`r!unlock` or `/unlock`).")
+            await message.channel.send("🔒 **Channel Locked!**")
         except: pass
         return
 
@@ -305,19 +305,19 @@ async def run_logic(ctx_or_interaction):
     channel, guild, responder = get_channel_and_guild(ctx_or_interaction)
     channel_id_str = str(channel.id)
     if channel_id_str not in COUNTING_CHANNELS:
-        await responder.send_message("❌ Racing tracks can only be initialized inside designated counting channels (c1 or c2).", ephemeral=True)
+        await responder.send_message("❌ can only be initialized inside og and classic", ephemeral=True)
         return
 
     existing_race = races_collection.find_one({"_id": f"race_{channel_id_str}"})
     if existing_race:
-        await responder.send_message("🏁 A race track session is already running inside this channel! Type `r!pace` or `/pace` to view performance metrics.", ephemeral=True)
+        await responder.send_message("already running <3", ephemeral=True)
         return
 
     races_collection.insert_one({
         "_id": f"race_{channel_id_str}", "channel_id": channel_id_str,
         "start_time": None, "total_counts": 0, "players": {}
     })
-    await responder.send_message(f"🟢 **The Race has officially begun in <#{channel_id_str}>!** The clock starts on the first number drop!")
+    await responder.send_message(f"**race has begun in <#{channel_id_str}>!**")
 
 async def yay_logic(ctx_or_interaction):
     channel, guild, responder = get_channel_and_guild(ctx_or_interaction)
@@ -326,7 +326,7 @@ async def yay_logic(ctx_or_interaction):
 
     race = races_collection.find_one({"_id": f"race_{channel_id_str}"})
     if not race:
-        await responder.send_message("❌ There is no active race running inside this channel to stop.", ephemeral=True)
+        await responder.send_message("❌ no active race ", ephemeral=True)
         return
 
     start_time = race.get("start_time")
@@ -335,7 +335,7 @@ async def yay_logic(ctx_or_interaction):
     final_pace = round(total_counts / duration_hours, 1)
 
     embed = discord.Embed(title=f"🛑 Race Finished — #{channel.name}", color=discord.Color.red())
-    embed.description = f"**Final Room Pace:** `{final_pace} counts/hr`\n**Total Numbers Dropped:** `{total_counts}`"
+    embed.description = f"**pace:** `{final_pace} counts/hr`\n**counts:** `{total_counts}`"
     
     players = race.get("players", {})
     mvp_list = []
@@ -346,7 +346,7 @@ async def yay_logic(ctx_or_interaction):
         leaderboard_text = ""
         for index, (p_id, p_counts) in enumerate(sorted_players[:5]):
             leaderboard_text += f"`#{index+1}` <@{p_id}> — {p_counts} drops ({round(p_counts / duration_hours, 1)}/hr)\n"
-        embed.add_field(name="🏆 Contributor Standings", value=leaderboard_text, inline=False)
+        embed.add_field(name="Standings", value=leaderboard_text, inline=False)
 
     if total_counts > 0:
         top_races_collection.insert_one({
@@ -364,10 +364,10 @@ async def pace_logic(ctx_or_interaction):
     channel, guild, responder = get_channel_and_guild(ctx_or_interaction)
     active_races = list(races_collection.find())
     if not active_races:
-        await responder.send_message("ℹ️ No active races are running right now. Type `r!run` or `/run` to start one!", ephemeral=True)
+        await responder.send_message("no active runs", ephemeral=True)
         return
 
-    embed = discord.Embed(title="⚡ Live Race Track Pace Metrics", color=discord.Color.teal())
+    embed = discord.Embed(title="pace", color=discord.Color.teal())
     for race in active_races:
         ch_id = race["channel_id"]
         start_time = race.get("start_time")
@@ -379,7 +379,7 @@ async def pace_logic(ctx_or_interaction):
             sorted_players = sorted(players.items(), key=lambda item: item, reverse=True)
             mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} drops)" + (f"\n2. <@{sorted_players[1][0]}> ({sorted_players[1][1]} drops)" if len(sorted_players) >= 2 else "")
 
-        field_value = f"• **Current Speed:** `{current_pace} counts/hr`\n• **Total Drops:** `{race.get('total_counts', 0)}`\n• **Top 2 Counters:**\n{mvp_display}"
+        field_value = f"• **Current Speed:** `{current_pace} counts/hr`\n• **drops:** `{race.get('total_counts', 0)}`\n• **Top 2 Counters:**\n{mvp_display}"
         channel_obj = bot.get_channel(int(ch_id))
         embed.add_field(name=f"🏁 Channel: #{channel_obj.name if channel_obj else ch_id}", value=field_value, inline=False)
         
@@ -390,9 +390,9 @@ async def toprun_logic(ctx_or_interaction):
     channel, guild, responder = get_channel_and_guild(ctx_or_interaction)
     if str(channel.id) in COUNTING_CHANNELS: return
     records = list(top_races_collection.find().sort("pace", -1).limit(10))
-    embed = discord.Embed(title="🏆 All-Time Top 10 Fastest Races Leaderboard", color=discord.Color.purple())
+    embed = discord.Embed(title="Top 10 Fastest Runs", color=discord.Color.purple())
 
-    if not records: embed.description = "No completed races have been logged yet!"
+    if not records: embed.description = "no races yet!"
     else:
         leaderboard_text = ""
         medals = ["🥇", "🥈", "🥉"]
@@ -401,7 +401,7 @@ async def toprun_logic(ctx_or_interaction):
             mvp1, mvp2 = record.get("mvp1_id"), record.get("mvp2_id")
             mvp_text = f"<@{mvp1}>" if mvp1 else "None"
             if mvp2: mvp_text += f" & <@{mvp2}>"
-            leaderboard_text += f"{rank} **{record.get('pace', 0.0)} counts/hr** — #{record.get('channel_name')} ({record.get('total_counts')}) | MVPs: {mvp_text}\n"
+            leaderboard_text += f"{rank} **{record.get('pace', 0.0)}** — ({record.get('total_counts')}) | MVPs: {mvp_text}\n"
         embed.description = leaderboard_text
 
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
@@ -412,9 +412,9 @@ async def lb_logic(ctx_or_interaction):
     if str(channel.id) in COUNTING_CHANNELS: return  
     top_users = list(leaderboard_collection.find().sort("correct_counts", -1).limit(10))
     timer = get_tournament_deadline()
-    embed = discord.Embed(title="🏆 Server Global Counting Leaderboard", color=discord.Color.blue())
+    embed = discord.Embed(title="🏆 server leaderboard(14 days)", color=discord.Color.blue())
     
-    if not top_users: embed.description = "The leaderboard is empty for this cycle."
+    if not top_users: embed.description = "is empty :("
     else:
         leaderboard_text = ""
         medals = ["🥇", "🥈", "🥉"]
@@ -423,7 +423,7 @@ async def lb_logic(ctx_or_interaction):
         embed.description = leaderboard_text
 
     end_date = timer["end_date"].replace(tzinfo=timezone.utc) if timer["end_date"].tzinfo is None else timer["end_date"]
-    embed.set_footer(text=f"Time remaining in tournament: {max(0, (end_date - datetime.now(timezone.utc)).days)} Days")
+    embed.set_footer(text=f"remaining: {max(0, (end_date - datetime.now(timezone.utc)).days)} Days")
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
     else: await responder.send_message(embed=embed)
 # ==============================================================================
@@ -449,14 +449,14 @@ async def text_lb(ctx): await lb_logic(ctx)
 async def text_lock(ctx):
     if str(ctx.channel.id) not in COUNTING_CHANNELS: return
     await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
-    await ctx.send("🔒 **Channel Locked!** Counting frozen manually by an Administrator.")
+    await ctx.send("🔒 **Channel Locked!** wait...")
 
 @bot.command(name='unlock')
 @commands.has_permissions(administrator=True)
 async def text_unlock(ctx):
     if str(ctx.channel.id) not in COUNTING_CHANNELS: return
     await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=None)
-    await ctx.send("🔓 **Channel Unlocked!** Users can resume counting normally.")
+    await ctx.send("🔓 **Channel Unlocked!**")
 
 @bot.command(name='reset')
 @commands.has_permissions(administrator=True)
@@ -464,50 +464,50 @@ async def text_reset(ctx):
     leaderboard_collection.delete_many({})
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}}, upsert=True)
-    await ctx.send("🔄 **Tournament Reset!** Global tournament scoreboard completely wiped clean.")
+    await ctx.send("🔄 **game reset!**")
 # ==============================================================================
 # PART 8: NATIVE SLASH COMMANDS ARCHITECTURE MAP
 # ==============================================================================
-@bot.tree.command(name='run', description='Starts a local channel race track.')
+@bot.tree.command(name='run', description='starts race.')
 async def slash_run(interaction: discord.Interaction): await run_logic(interaction)
 
-@bot.tree.command(name='yay', description='Stops the active race and displays the top 2 MVPs.')
+@bot.tree.command(name='yay', description='stops the active race.')
 async def slash_yay(interaction: discord.Interaction): await yay_logic(interaction)
 
-@bot.tree.command(name='pace', description='Displays real-time performance for running races.')
+@bot.tree.command(name='pace', description='running races.')
 async def slash_pace(interaction: discord.Interaction): await pace_logic(interaction)
 
-@bot.tree.command(name='toprun', description='Displays the permanent historical Top 10 fastest races.')
+@bot.tree.command(name='toprun', description='top 10 fastest races.')
 async def slash_toprun(interaction: discord.Interaction): await toprun_logic(interaction)
 
-@bot.tree.command(name='lb', description='Displays the global 14-day server counting leaderboard.')
+@bot.tree.command(name='lb', description='14day server leaderboard')
 async def slash_lb(interaction: discord.Interaction): await lb_logic(interaction)
 
-@bot.tree.command(name='lock', description='Manually freezes and locks down the current counting channel.')
+@bot.tree.command(name='lock', description='locks down')
 @app_commands.checks.has_permissions(administrator=True)
 async def slash_lock(interaction: discord.Interaction):
     if str(interaction.channel.id) not in COUNTING_CHANNELS:
-        await interaction.response.send_message("❌ Executable within game tracking rooms only.", ephemeral=True)
+        await interaction.response.send_message("❌ not here lol.", ephemeral=True)
         return
     await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
-    await interaction.response.send_message("🔒 **Channel Locked!** Counting frozen manually by an Administrator.")
+    await interaction.response.send_message("🔒 **Channel Locked!**")
 
-@bot.tree.command(name='unlock', description='Unlocks the counting channel to resume activity.')
+@bot.tree.command(name='unlock', description='unlocks the counting channel')
 @app_commands.checks.has_permissions(administrator=True)
 async def slash_unlock(interaction: discord.Interaction):
     if str(interaction.channel.id) not in COUNTING_CHANNELS:
-        await interaction.response.send_message("❌ Executable within game tracking rooms only.", ephemeral=True)
+        await interaction.response.send_message("❌ not here", ephemeral=True)
         return
     await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=None)
-    await interaction.response.send_message("🔓 **Channel Unlocked!** Users can resume counting normally.")
+    await interaction.response.send_message("🔓 **Channel Unlocked!**")
 
-@bot.tree.command(name='reset', description='Manually wipes the 14-day tournament scoreboard and restarts.')
+@bot.tree.command(name='reset', description='manually wipes the 14day game scoreboard and restarts yay.')
 @app_commands.checks.has_permissions(administrator=True)
 async def slash_reset(interaction: discord.Interaction):
     leaderboard_collection.delete_many({})
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}}, upsert=True)
-    await interaction.response.send_message("🔄 **Tournament Reset!** Global tournament scoreboard completely wiped clean.")
+    await interaction.response.send_message("**game reset!** clean clean clean.")
 
 bot.run(TOKEN)
 
