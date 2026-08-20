@@ -140,11 +140,11 @@ async def check_and_announce_winners():
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}})
 # ==============================================================================
-# PART 5: CORE CHAT INTERCEPTOR & MARKDOWN-IMMUNE EMBED PARSER
+# PART 5: CORE CHAT INTERCEPTOR & SILENT USERNAME-BASED EMBED PARSER
 # ==============================================================================
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}! 3-Channel context-aware system active.')
+    print(f'Logged in as {bot.user.name}! Silent username-based role system active.')
     get_tournament_deadline()
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
@@ -156,49 +156,37 @@ async def on_message(message):
 
     # === C3 CHANNEL ROLE AUTOMATION PROCESSING ===
     if current_channel_str == c3 and message.embeds:
-        print(f"[LOG] Found an embed message in c3 from Author ID: {message.author.id}")
-
+        # Ignore embeds if they are not from the two target bots
         if message.author.id not in [COUNTING_BOT_ID, CLASSIC_BOT_ID]:
-            print(f"[LOG] Ignored embed: Author is not a target counting bot.")
             return
 
-        # FIXED: Extract the actual single embed object out of the list container safely
         embed = message.embeds[0]
         guild = message.guild
         member = None
-        target_user_id = None
 
-        # Extract User ID securely from the Embed Thumbnail or Author Icon URL
-        avatar_url = ""
-        if embed.thumbnail and embed.thumbnail.url:
-            avatar_url = embed.thumbnail.url
-        elif embed.author and embed.author.icon_url:
-            avatar_url = embed.author.icon_url
+        # Extract the exact unique username from the embed title or embed author field
+        raw_text_name = ""
+        if embed.title:
+            raw_text_name = embed.title
+        elif embed.author and embed.author.name:
+            raw_text_name = embed.author.name
 
-        if avatar_url:
-            avatar_match = re.search(r'avatars/(\d+)/', avatar_url)
-            if avatar_match:
-                target_user_id = int(avatar_match.group(1))
-                print(f"[LOG] Successfully extracted User ID from avatar URL: {target_user_id}")
+        if raw_text_name:
+            # Clean away common extra formatting phrases if the bot adds them
+            cleaned_name = re.sub(r"(Stats for|'s Stats|'s stats|Stats of|stats)", "", raw_text_name, flags=re.IGNORECASE).strip()
+            print(f"[LOG] Searching server for unique global username: '{cleaned_name}'")
 
-        if target_user_id:
+            # Force an on-demand API query to find the exact user in the server roster by real name
             try:
-                member = await guild.fetch_member(target_user_id)
-                print(f"[LOG] Successfully fetched member from Discord API: {member.name}")
+                query_results = await guild.query_members(query=cleaned_name, limit=1)
+                if query_results:
+                    member = query_results[0]
+                    print(f"[LOG Success] Found member using unique username lookup: {member.name}")
             except Exception as e:
-                print(f"[LOG ERROR] Failed to fetch member via Avatar ID link: {e}")
+                print(f"[LOG ERROR] Member text query failed: {e}")
 
-        # Fallback Check: Reply link context
-        if not member and message.reference and message.reference.message_id:
-            try:
-                original_msg = await message.channel.fetch_message(message.reference.message_id)
-                member = original_msg.author
-                print(f"[LOG Fallback] Found member via message reply reference: {member.name}")
-            except Exception as e:
-                print(f"[LOG ERROR] Fallback message fetch failed: {e}")
-
+        # If the member cannot be found in the server cache or query, cancel processing safely
         if not member: 
-            print("[Warning Log] Embed found, but completely failed to identify the target server owner.")
             return
 
         # Loop through columns individually to inspect the "Global Stats" panel text
@@ -212,18 +200,13 @@ async def on_message(message):
             if "Global Stats" in embed.description:
                 global_stats_text = embed.description
 
-        if not global_stats_text:
-            print("[LOG] Aborted: Could not find 'Global Stats' text section inside the embed fields or description.")
-            return
-
-        print(f"[LOG] Scanning Global Stats Text block:\n{global_stats_text}")
+        if not global_stats_text: return
 
         # Target 1: Official Counting Bot (Pure Numbers & C1 Access)
         if message.author.id == COUNTING_BOT_ID:
             match = re.search(r'Score:\s*(?:\*\*)?([\d,]+)(?:\*\*)?', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
-                print(f"[LOG Regular] Regex matched! Found score value: {score}")
                 
                 target_role = None
                 for min_v, max_v, name in STANDARD_TIERS:
@@ -231,38 +214,25 @@ async def on_message(message):
                         target_role = name
                         break
                 
-                print(f"[LOG Regular] Evaluated target tier role name: {target_role}")
                 if target_role:
                     role = discord.utils.get(guild.roles, name=target_role)
                     if not role:
-                        print(f"[LOG Regular] Role '{target_role}' doesn't exist. Creating role now...")
                         role = await guild.create_role(name=target_role, colour=discord.Colour.purple(), reason="Automated milestone tier role.")
                         if int(target_role) >= 25000 and c1:
                             target_ch = guild.get_channel(int(c1))
-                            if target_ch: 
-                                await target_ch.set_permissions(role, view_channel=True, send_messages=True)
-                                print(f"[LOG Regular] Set custom overwrite permissions for room: c1")
+                            if target_ch: await target_ch.set_permissions(role, view_channel=True, send_messages=True)
                     
                     removals = [r for r in member.roles if r.name in ALL_STANDARD_NAMES and r.name != target_role]
                     if role not in member.roles:
-                        if removals: 
-                            await member.remove_roles(*removals)
-                            print(f"[LOG Regular] Cleaned up legacy standard tier roles from profile.")
+                        if removals: await member.remove_roles(*removals)
                         await member.add_roles(role)
-                        print(f"[SUCCESS] Added role '{target_role}' to member '{member.name}'!")
-                        msg = await message.channel.send(f"🎉 {member.mention} has been updated to the **{target_role}** tier! (Score: {score:,})")
-                        await asyncio.sleep(10)
-                        try: await message.delete(); await msg.delete()
-                        except: pass
-            else:
-                print("[LOG Regular] Regex failed: Could not parse a numeric score out of the text block.")
+                        print(f"[SUCCESS SILENT] Assigned role {target_role} to {member.name}")
 
         # Target 2: Classic Counting Bot (Suffix "c" & C2 Access)
         elif message.author.id == CLASSIC_BOT_ID:
             match = re.search(r'Score:\s*(?:\*\*)?([\d,]+)(?:\*\*)?', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
-                print(f"[LOG Classic] Regex matched! Found score value: {score}")
                 
                 target_role = None
                 for min_v, max_v, name in CLASSIC_TIERS:
@@ -270,31 +240,19 @@ async def on_message(message):
                         target_role = name
                         break
                 
-                print(f"[LOG Classic] Evaluated target tier role name: {target_role}")
                 if target_role:
                     role = discord.utils.get(guild.roles, name=target_role)
                     if not role:
-                        print(f"[LOG Classic] Role '{target_role}' doesn't exist. Creating role now...")
                         role = await guild.create_role(name=target_role, colour=discord.Colour.blue(), reason="Automated classic tier role.")
                         if int(target_role.replace('c','')) >= 25000 and c2:
                             target_ch = guild.get_channel(int(c2))
-                            if target_ch: 
-                                await target_ch.set_permissions(role, view_channel=True, send_messages=True)
-                                print(f"[LOG Classic] Set custom overwrite permissions for room: c2")
+                            if target_ch: await target_ch.set_permissions(role, view_channel=True, send_messages=True)
                     
                     removals = [r for r in member.roles if r.name in ALL_CLASSIC_NAMES and r.name != target_role]
                     if role not in member.roles:
-                        if removals: 
-                            await member.remove_roles(*removals)
-                            print(f"[LOG Classic] Cleaned up legacy classic tier roles from profile.")
+                        if removals: await member.remove_roles(*removals)
                         await member.add_roles(role)
-                        print(f"[SUCCESS] Added classic role '{target_role}' to member '{member.name}'!")
-                        msg = await message.channel.send(f"🎉 {member.mention} has been updated to the Classic **{target_role}** tier! (Score: {score:,})")
-                        await asyncio.sleep(10)
-                        try: await message.delete(); await msg.delete()
-                        except: pass
-            else:
-                print("[LOG Classic] Regex failed: Could not parse a numeric score out of the text block.")
+                        print(f"[SUCCESS SILENT] Assigned classic role {target_role} to {member.name}")
         return
 
     # === GAME CHANNELS PROGRESSIVE COUNTING PROCESSING (C1 & C2) ===
@@ -327,7 +285,6 @@ async def on_message(message):
 
     if input_number != (previous_number + 1) or message.author.id == last_user_id: return
     increment_global_score(message.author.id)
-
 
     race = races_collection.find_one({"_id": f"race_{current_channel_str}"})
     if race:
