@@ -15,21 +15,17 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
 
-# Safely parse strings from Railway variables into integers for Discord compatibility
-try:
-    c1 = int(str(os.getenv('c1')).strip())
-    c2 = int(str(os.getenv('c2')).strip())
-    COUNTING_CHANNELS = [c1, c2]
-except (TypeError, ValueError) as e:
-    print(f"Error parsing channel environment variables c1 or c2: {e}")
-    COUNTING_CHANNELS = []
+# Keep these as clean strings to guarantee a perfect text match with Railway variables
+c1 = str(os.getenv('c1')).strip()
+c2 = str(os.getenv('c2')).strip()
+COUNTING_CHANNELS = [c1, c2]
 
 try:
     mongo_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
     db = mongo_client["counting_bot_db"]
     leaderboard_collection = db["leaderboard"]  # Stores combined global user scores
     system_collection = db["system_state"]       # Stores global tournament timer
-    print("Connected to MongoDB Atlas successfully!")
+    print(f"Connected to MongoDB Atlas! Tracking channels: {COUNTING_CHANNELS}")
 except Exception as e:
     print(f"Failed to connect to MongoDB: {e}")
     exit(1)
@@ -47,9 +43,9 @@ def get_tournament_deadline():
     return timer
 
 def increment_global_score(user_id):
-    """Combines points globally! Adds +1 to a user's total score regardless of which channel they used."""
+    """Adds +1 to a user's total score combined across channels."""
     leaderboard_collection.update_one(
-        {"_id": user_id},
+        {"_id": str(user_id)},  # Store as string for clean DB rendering
         {"$inc": {"correct_counts": 1}},
         upsert=True
     )
@@ -59,39 +55,37 @@ async def check_and_announce_winners():
     timer = get_tournament_deadline()
     deadline = timer.get("end_date")
     
-    # Ensure deadline from DB has UTC timezone info attached
     if deadline.tzinfo is None:
         deadline = deadline.replace(tzinfo=timezone.utc)
 
     if datetime.now(timezone.utc) < deadline:
         return
 
-    # Find the top player across the whole server
     top_user = leaderboard_collection.find_one(sort=[("correct_counts", -1)])
 
-    # Broadcast the winner text announcement to BOTH counting channels
-    for channel_id in COUNTING_CHANNELS:
-        channel = bot.get_channel(channel_id)
-        if not channel:
+    for ch_id_str in COUNTING_CHANNELS:
+        try:
+            channel = bot.get_channel(int(ch_id_str))
+            if not channel:
+                continue
+
+            if top_user and top_user.get("correct_counts", 0) > 0:
+                winner_id = top_user.get("_id")
+                winner_score = top_user.get("correct_counts", 0)
+                
+                embed = discord.Embed(
+                    title="🎉 Tournament Ended! 🎉",
+                    description=f"The 14-day global counting cycle is complete!\n\n👑 **Global Winner:** <@{winner_id}> with a total of **{winner_score}** correct counts combined across channels!",
+                    color=discord.Color.gold()
+                )
+                await channel.send(embed=embed)
+            else:
+                await channel.send("⏳ The 14-day cycle ended, but nobody participated! Starting a new round.")
+        except Exception:
             continue
 
-        if top_user and top_user.get("correct_counts", 0) > 0:
-            winner_id = top_user.get("_id")
-            winner_score = top_user.get("correct_counts", 0)
-            
-            embed = discord.Embed(
-                title="🎉 Tournament Ended! 🎉",
-                description=f"The 14-day global counting cycle is complete!\n\n👑 **Global Winner:** <@{winner_id}> with a total of **{winner_score}** correct counts combined across channels!",
-                color=discord.Color.gold()
-            )
-            await channel.send(embed=embed)
-        else:
-            await channel.send("⏳ The 14-day cycle ended, but nobody participated! Starting a new round.")
-
-    # WIPE EVERYTHING FOR THE RESET
-    leaderboard_collection.delete_many({})  # Clear total user points
-        
-    # Calculate and set the next 14-day deadline
+    leaderboard_collection.delete_many({})
+    
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one(
         {"_id": "global_tournament"},
@@ -100,15 +94,17 @@ async def check_and_announce_winners():
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name} tracking total scores natively across history logs!')
+    print(f'Logged in as {bot.user.name}! Global tracking is active.')
     get_tournament_deadline()
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
 
 @bot.event
 async def on_message(message):
-    # Route global commands normally if they happen outside counting channels
-    if message.channel.id not in COUNTING_CHANNELS:
+    # Convert active message channel ID to string to match the environment variables perfectly
+    current_channel_id_str = str(message.channel.id)
+
+    if current_channel_id_str not in COUNTING_CHANNELS:
         await bot.process_commands(message)
         return
 
@@ -128,40 +124,42 @@ async def on_message(message):
     previous_number = 0
     last_user_id = None
 
-    # Dynamically query the last two entries to check historical chat context
-    # history[0] is the message just sent; history[1] is the one before it
-    history = [msg async for msg in channel.history(limit=2)]
-    
-    if len(history) > 1:
-        last_msg = history[1]
-        last_user_id = last_msg.author.id
+    # Scan back through messages to find the baseline sequence number
+    async for msg in channel.history(limit=20):
+        if msg.id == message.id:
+            continue
+        if msg.author.bot:
+            continue
+
+        msg_content = msg.content.strip()
         try:
-            previous_number = int(last_msg.content.strip())
+            previous_number = int(msg_content)
+            if str(previous_number) == msg_content:
+                last_user_id = msg.author.id
+                break
         except ValueError:
-            # If text directly above isn't a plain integer, sequence fell back to a clean start
-            previous_number = 0
+            continue
 
     expected_number = previous_number + 1
 
-    # Rule 1: No double counting inside the SAME channel (Fails silently)
+    # Rule 1: No double counting
     if message.author.id == last_user_id:
         return
 
-    # Rule 2: Sequence check for this channel (Fails silently)
+    # Rule 2: Sequence check
     if input_number != expected_number:
         return
 
-    # Valid step: User successfully matched the sequence! Log their global points
+    # Everything matches! Update MongoDB leaderboard
     increment_global_score(message.author.id)
 
 
 @bot.command(name='leaderboard')
 async def leaderboard(ctx):
     """Displays the top 10 global leaderboard combining both channels."""
-    if ctx.channel.id in COUNTING_CHANNELS:
-        return  # Keep counting channels completely silent
+    if str(ctx.channel.id) in COUNTING_CHANNELS:
+        return
 
-    # Fetch top 10 users across the entire server
     top_users = list(leaderboard_collection.find().sort("correct_counts", -1).limit(10))
     timer = get_tournament_deadline()
     
@@ -179,7 +177,6 @@ async def leaderboard(ctx):
             leaderboard_text += f"{rank} <@{user_id}> — {counts} total pts\n"
         embed.description = leaderboard_text
 
-    # Show remaining days in the global cycle with accurate timezone-aware math
     end_date = timer["end_date"]
     if end_date.tzinfo is None:
         end_date = end_date.replace(tzinfo=timezone.utc)
