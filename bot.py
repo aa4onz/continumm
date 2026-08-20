@@ -10,7 +10,6 @@ from datetime import datetime, timedelta, timezone
 intents = discord.Intents.default()
 intents.message_content = True
 
-# Listen to ! for tournaments and r! for local channel racing metrics
 bot = commands.Bot(command_prefix=["!", "r!"], intents=intents)
 
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -26,6 +25,7 @@ try:
     leaderboard_collection = db["leaderboard"]       # 14-Day Global Scores
     system_collection = db["system_state"]           # Global tournament timer
     races_collection = db["active_races"]             # Live racing contexts
+    top_races_collection = db["top_races"]           # Permanent Top 10 Records
     print(f"Connected to MongoDB Atlas! Tracking channels: {COUNTING_CHANNELS}")
 except Exception as e:
     print(f"Failed to connect to MongoDB: {e}")
@@ -50,7 +50,6 @@ def increment_global_score(user_id):
     )
 
 def log_race_contribution(channel_id, user_id):
-    """Safely records user performance scores unique to an active channel race."""
     races_collection.update_one(
         {"_id": f"race_{channel_id}"},
         {"$inc": {f"players.{user_id}": 1, "total_counts": 1}}
@@ -115,7 +114,6 @@ async def on_message(message):
 
     content = message.content.strip()
 
-    # Skip validation logic completely if it's an explicit race manager command
     if content.startswith('r!'):
         return
 
@@ -153,10 +151,8 @@ async def on_message(message):
     if input_number != expected_number:
         return
 
-    # Valid Count Processed: Update 14-day global score
     increment_global_score(message.author.id)
 
-    # Active Race Check: If this specific channel has an active race, count it!
     race = races_collection.find_one({"_id": f"race_{current_channel_id_str}"})
     if race:
         log_race_contribution(current_channel_id_str, message.author.id)
@@ -189,7 +185,7 @@ async def start_race(ctx):
 
 @bot.command(name='stop')
 async def stop_race(ctx):
-    """Stops the active room's track session and renders final speed stats."""
+    """Stops the active room's track session and records its pace if it ranks in the Top 10."""
     channel_id_str = str(ctx.channel.id)
     if channel_id_str not in COUNTING_CHANNELS:
         return
@@ -201,7 +197,7 @@ async def stop_race(ctx):
 
     start_time = race["start_time"].replace(tzinfo=timezone.utc)
     duration_hours = (datetime.now(timezone.utc) - start_time).total_seconds() / 3600.0
-    duration_hours = max(duration_hours, 0.0001) # Avoid division by zero
+    duration_hours = max(duration_hours, 0.0001) 
     
     total_counts = race.get("total_counts", 0)
     final_pace = round(total_counts / duration_hours, 1)
@@ -210,7 +206,10 @@ async def stop_race(ctx):
     embed.description = f"**Final Room Pace:** `{final_pace} counts/hr`\n**Total Numbers Dropped:** `{total_counts}`"
     
     players = race.get("players", {})
+    mvp_id = None
+    
     if players:
+        mvp_id = max(players, key=players.get)
         sorted_players = sorted(players.items(), key=lambda item: item[1], reverse=True)
         leaderboard_text = ""
         for index, (p_id, p_counts) in enumerate(sorted_players[:5]):
@@ -218,13 +217,23 @@ async def stop_race(ctx):
             leaderboard_text += f"`#{index+1}` <@{p_id}> — {p_counts} drops ({p_pace}/hr)\n"
         embed.add_field(name="🏆 Top Contributors", value=leaderboard_text, inline=False)
 
+    # Save to top permanent records if total counts exist
+    if total_counts > 0:
+        top_races_collection.insert_one({
+            "pace": final_pace,
+            "total_counts": total_counts,
+            "channel_name": ctx.channel.name,
+            "mvp_id": mvp_id,
+            "timestamp": datetime.now(timezone.utc)
+        })
+
     races_collection.delete_one({"_id": f"race_{channel_id_str}"})
     await ctx.send(embed=embed)
 
 
 @bot.command(name='pace')
 async def view_pace(ctx):
-    """Displays real-time speed track performance. Pulls both metrics together if multiple races run."""
+    """Displays real-time speed track performance for live running races."""
     active_races = list(races_collection.find())
     
     if not active_races:
@@ -262,9 +271,39 @@ async def view_pace(ctx):
     await ctx.send(embed=embed)
 
 
+@bot.command(name='topbox')
+async def view_top_races(ctx):
+    """Displays a permanent high-score board showing the Top 10 fastest races in server history."""
+    if str(ctx.channel.id) in COUNTING_CHANNELS:
+        return
+
+    # Fetch Top 10 historical entries sorted by highest pace speed record
+    records = list(top_races_collection.find().sort("pace", -1).limit(10))
+
+    embed = discord.Embed(title="🏆 All-Time Top 10 Fastest Races Leaderboard", color=discord.Color.purple())
+
+    if not records:
+        embed.description = "No completed races have been logged in server history yet!"
+    else:
+        leaderboard_text = ""
+        medals = ["🥇", "🥈", "🥉"]
+        for index, record in enumerate(records):
+            pace = record.get("pace", 0.0)
+            counts = record.get("total_counts", 0)
+            ch_name = record.get("channel_name", "unknown")
+            mvp_id = record.get("mvp_id")
+            
+            rank = medals[index] if index < 3 else f"`#{index + 1}`"
+            mvp_text = f"<@{mvp_id}>" if mvp_id else "No MVP"
+            
+            leaderboard_text += f"{rank} **{pace} counts/hr** — #{ch_name} ({counts} drops) | MVP: {mvp_text}\n"
+        embed.description = leaderboard_text
+
+    await ctx.send(embed=embed)
+
+
 @bot.command(name='leaderboard')
 async def leaderboard(ctx):
-    """Displays the standard top 10 global leaderboard combining both channels (Prefix: !leaderboard)."""
     if str(ctx.channel.id) in COUNTING_CHANNELS:
         return  
 
