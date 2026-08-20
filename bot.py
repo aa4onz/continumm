@@ -3,11 +3,9 @@ import discord
 from discord.ext import commands
 from pymongo import MongoClient
 import certifi
-#from apscheduler.schedulers.asyncio import AsyncioScheduler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
 from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -16,47 +14,33 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
-c1 = os.getenv('c1')
-c2 = os.getenv('c2')
 
-# ADD YOUR TWO CHANNEL IDs HERE (Keep them as integers)
-COUNTING_CHANNELS = [c1,c2]
+# Safely parse strings from Railway variables into integers for Discord compatibility
+try:
+    c1 = int(os.getenv('c1'))
+    c2 = int(os.getenv('c2'))
+    COUNTING_CHANNELS = [c1, c2]
+except (TypeError, ValueError) as e:
+    print(f"Error parsing channel environment variables c1 or c2: {e}")
+    COUNTING_CHANNELS = []
 
 try:
     mongo_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
     db = mongo_client["counting_bot_db"]
     leaderboard_collection = db["leaderboard"]  # Stores combined global user scores
-    system_collection = db["system_state"]       # Stores individual channel streaks and global tournament timer
+    system_collection = db["system_state"]       # Stores global tournament timer
     print("Connected to MongoDB Atlas successfully!")
 except Exception as e:
     print(f"Failed to connect to MongoDB: {e}")
     exit(1)
 
-#scheduler = AsyncioScheduler()
 scheduler = AsyncIOScheduler()
 
-
-def get_channel_streak(channel_id):
-    """Fetches or initializes the active count and last user for a specific channel."""
-    state = system_collection.find_one({"_id": f"streak_{channel_id}"})
-    if not state:
-        new_state = {"_id": f"streak_{channel_id}", "current_count": 0, "last_user_id": None}
-        system_collection.insert_one(new_state)
-        return new_state
-    return state
-
-def save_channel_streak(channel_id, current_count, last_user_id):
-    """Saves the running count and last user for a specific channel."""
-    system_collection.update_one(
-        {"_id": f"streak_{channel_id}"},
-        {"$set": {"current_count": current_count, "last_user_id": last_user_id}}
-    )
-
 def get_tournament_deadline():
-    """Fetches or initializes the global 14-day tournament timer."""
+    """Fetches or initializes the global 14-day tournament timer using timezone-aware UTC."""
     timer = system_collection.find_one({"_id": "global_tournament"})
     if not timer:
-        deadline = datetime.utcnow() + timedelta(days=14)
+        deadline = datetime.now(timezone.utc) + timedelta(days=14)
         new_timer = {"_id": "global_tournament", "end_date": deadline}
         system_collection.insert_one(new_timer)
         return new_timer
@@ -74,8 +58,12 @@ async def check_and_announce_winners():
     """Checks the global 14-day timer and announces the absolute winner to both channels."""
     timer = get_tournament_deadline()
     deadline = timer.get("end_date")
+    
+    # Ensure deadline from DB has UTC timezone info attached
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
 
-    if datetime.utcnow() < deadline:
+    if datetime.now(timezone.utc) < deadline:
         return
 
     # Find the top player across the whole server
@@ -102,13 +90,9 @@ async def check_and_announce_winners():
 
     # WIPE EVERYTHING FOR THE RESET
     leaderboard_collection.delete_many({})  # Clear total user points
-    
-    # Reset all running channel streaks to 0
-    for channel_id in COUNTING_CHANNELS:
-        save_channel_streak(channel_id, 0, None)
         
     # Calculate and set the next 14-day deadline
-    new_deadline = datetime.utcnow() + timedelta(days=14)
+    new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one(
         {"_id": "global_tournament"},
         {"$set": {"end_date": new_deadline}}
@@ -116,12 +100,8 @@ async def check_and_announce_winners():
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name} tracking total scores across {len(COUNTING_CHANNELS)} channels!')
-    # Initialize database collections if empty
+    print(f'Logged in as {bot.user.name} tracking total scores natively across history logs!')
     get_tournament_deadline()
-    for cid in COUNTING_CHANNELS:
-        get_channel_streak(cid)
-        
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
 
@@ -144,25 +124,34 @@ async def on_message(message):
     except ValueError:
         return
 
-    channel_id = message.channel.id
-    streak_state = get_channel_streak(channel_id)
-    current_count = streak_state["current_count"]
-    last_user_id = streak_state["last_user_id"]
+    channel = message.channel
+    previous_number = 0
+    last_user_id = None
 
-    expected_number = current_count + 1
+    # Dynamically query the last two entries to check historical chat context
+    # history[0] is the message just sent; history[1] is the one before it
+    history = [msg async for msg in channel.history(limit=2)]
+    
+    if len(history) > 1:
+        last_msg = history[1]
+        last_user_id = last_msg.author.id
+        try:
+            previous_number = int(last_msg.content.strip())
+        except ValueError:
+            # If text directly above isn't a plain integer, sequence fell back to a clean start
+            previous_number = 0
+
+    expected_number = previous_number + 1
 
     # Rule 1: No double counting inside the SAME channel (Fails silently)
     if message.author.id == last_user_id:
-        save_channel_streak(channel_id, 0, None)
         return
 
     # Rule 2: Sequence check for this channel (Fails silently)
     if input_number != expected_number:
-        save_channel_streak(channel_id, 0, None)
         return
 
-    # Valid step: Save channel progress and add to their GLOBAL score totals
-    save_channel_streak(channel_id, expected_number, message.author.id)
+    # Valid step: User successfully matched the sequence! Log their global points
     increment_global_score(message.author.id)
 
 
@@ -190,8 +179,12 @@ async def leaderboard(ctx):
             leaderboard_text += f"{rank} <@{user_id}> — {counts} total pts\n"
         embed.description = leaderboard_text
 
-    # Show remaining days in the global cycle
-    time_left = timer["end_date"] - datetime.utcnow()
+    # Show remaining days in the global cycle with accurate timezone-aware math
+    end_date = timer["end_date"]
+    if end_date.tzinfo is None:
+        end_date = end_date.replace(tzinfo=timezone.utc)
+        
+    time_left = end_date - datetime.now(timezone.utc)
     days_left = max(0, time_left.days)
     
     embed.set_footer(text=f"Time remaining in tournament: {days_left} Days")
