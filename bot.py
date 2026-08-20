@@ -340,7 +340,7 @@ async def yay_logic(ctx_or_interaction):
     players = race.get("players", {})
     mvp_list = []
     if players:
-        sorted_players = sorted(players.items(), key=lambda item: item, reverse=True)
+        sorted_players = sorted(players.items(), key=lambda item: item[1], reverse=True)
         for user_id, counts in sorted_players[:2]:
             mvp_list.append({"id": user_id, "score": counts})
         leaderboard_text = ""
@@ -376,7 +376,7 @@ async def pace_logic(ctx_or_interaction):
         players = race.get("players", {})
         mvp_display = "None"
         if players:
-            sorted_players = sorted(players.items(), key=lambda item: item, reverse=True)
+            sorted_players = sorted(players.items(), key=lambda item: item[1], reverse=True)
             mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} drops)" + (f"\n2. <@{sorted_players[1][0]}> ({sorted_players[1][1]} drops)" if len(sorted_players) >= 2 else "")
 
         field_value = f"• **Current Speed:** `{current_pace} counts/hr`\n• **drops:** `{race.get('total_counts', 0)}`\n• **Top 2 Counters:**\n{mvp_display}"
@@ -448,14 +448,53 @@ async def text_lb(ctx): await lb_logic(ctx)
 @commands.has_permissions(administrator=True)
 async def text_lock(ctx):
     if str(ctx.channel.id) not in COUNTING_CHANNELS: return
+    
+    # 1. Lock base everyone role
     await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
+    
+    # 2. Loop and override typing permissions for all standard and classic milestone role tags
+    for tier in STANDARD_TIERS:
+        role_name = tier[2]
+        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        if role: await ctx.channel.set_permissions(role, send_messages=False)
+        
+    for tier in CLASSIC_TIERS:
+        role_name = tier[2]
+        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        if role: await ctx.channel.set_permissions(role, send_messages=False)
+        
     await ctx.send("🔒 **Channel Locked!** wait...")
 
 @bot.command(name='unlock')
 @commands.has_permissions(administrator=True)
 async def text_unlock(ctx):
     if str(ctx.channel.id) not in COUNTING_CHANNELS: return
+    
+    # 1. Reset everyone role base state
     await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=None)
+    
+    # 2. Restore individual permissions back to their active tier parameters
+    for tier in STANDARD_TIERS:
+        role_name = tier[2]
+        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        if role:
+            # Re-unlock the channel only for users who are qualified (>= 25000) inside c1
+            if int(role_name) >= 25000 and str(ctx.channel.id) == c1:
+                await ctx.channel.set_permissions(role, view_channel=True, send_messages=True)
+            else:
+                await ctx.channel.set_permissions(role, overwrite=None)
+                
+    for tier in CLASSIC_TIERS:
+        role_name = tier[2]
+        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        if role:
+            val = int(role_name.replace('c',''))
+            # Re-unlock the channel only for users who are qualified (>= 25000) inside c2
+            if val >= 25000 and str(ctx.channel.id) == c2:
+                await ctx.channel.set_permissions(role, view_channel=True, send_messages=True)
+            else:
+                await ctx.channel.set_permissions(role, overwrite=None)
+                
     await ctx.send("🔓 **Channel Unlocked!**")
 
 @bot.command(name='reset')
@@ -489,8 +528,23 @@ async def slash_lock(interaction: discord.Interaction):
     if str(interaction.channel.id) not in COUNTING_CHANNELS:
         await interaction.response.send_message("❌ not here lol.", ephemeral=True)
         return
+        
+    await interaction.response.defer()
+    # 1. Lock base everyone role
     await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
-    await interaction.response.send_message("🔒 **Channel Locked!**")
+    
+    # 2. Loop and override typing permissions for all standard and classic milestone role tags via Slash
+    for tier_info in STANDARD_TIERS:
+        role_name = tier_info[2]
+        role = discord.utils.get(interaction.guild.roles, name=role_name)
+        if role: await interaction.channel.set_permissions(role, send_messages=False)
+        
+    for tier_info in CLASSIC_TIERS:
+        role_name = tier_info[2]
+        role = discord.utils.get(interaction.guild.roles, name=role_name)
+        if role: await interaction.channel.set_permissions(role, send_messages=False)
+        
+    await interaction.followup.send("🔒 **Channel Locked!**")
 
 @bot.tree.command(name='unlock', description='unlocks the counting channel')
 @app_commands.checks.has_permissions(administrator=True)
@@ -498,8 +552,32 @@ async def slash_unlock(interaction: discord.Interaction):
     if str(interaction.channel.id) not in COUNTING_CHANNELS:
         await interaction.response.send_message("❌ not here", ephemeral=True)
         return
+        
+    await interaction.response.defer()
+    # 1. Reset everyone role base state
     await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=None)
-    await interaction.response.send_message("🔓 **Channel Unlocked!**")
+    
+    # 2. Restore individual view/send permissions back to their active tier parameters via Slash
+    for tier_info in STANDARD_TIERS:
+        role_name = tier_info[2]
+        role = discord.utils.get(interaction.guild.roles, name=role_name)
+        if role:
+            if int(role_name) >= 25000 and str(interaction.channel.id) == c1:
+                await interaction.channel.set_permissions(role, view_channel=True, send_messages=True)
+            else:
+                await interaction.channel.set_permissions(role, overwrite=None)
+                
+    for tier_info in CLASSIC_TIERS:
+        role_name = tier_info[2]
+        role = discord.utils.get(interaction.guild.roles, name=role_name)
+        if role:
+            val = int(role_name.replace('c',''))
+            if val >= 25000 and str(interaction.channel.id) == c2:
+                await interaction.channel.set_permissions(role, view_channel=True, send_messages=True)
+            else:
+                await interaction.channel.set_permissions(role, overwrite=None)
+                
+    await interaction.followup.send("🔓 **Channel Unlocked!**")
 
 @bot.tree.command(name='reset', description='manually wipes the 14day game scoreboard and restarts yay.')
 @app_commands.checks.has_permissions(administrator=True)
@@ -510,4 +588,3 @@ async def slash_reset(interaction: discord.Interaction):
     await interaction.response.send_message("**game reset!** clean clean clean.")
 
 bot.run(TOKEN)
-
