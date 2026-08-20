@@ -3,7 +3,9 @@ import discord
 from discord.ext import commands
 from pymongo import MongoClient
 import certifi
-from apscheduler.schedulers.asyncio import AsyncioScheduler
+#from apscheduler.schedulers.asyncio import AsyncioScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime, timedelta
 
@@ -30,7 +32,9 @@ except Exception as e:
     print(f"Failed to connect to MongoDB: {e}")
     exit(1)
 
-scheduler = AsyncioScheduler()
+#scheduler = AsyncioScheduler()
+scheduler = AsyncIOScheduler()
+
 
 def get_channel_streak(channel_id):
     """Fetches or initializes the active count and last user for a specific channel."""
