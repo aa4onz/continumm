@@ -1,0 +1,4 @@
+discord.py==2.4.0
+pymongo==4.10.1
+certifi==2024.8.30
+apscheduler==3.10.4
