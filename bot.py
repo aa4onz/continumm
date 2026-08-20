@@ -162,7 +162,8 @@ async def on_message(message):
             print(f"[LOG] Ignored embed: Author is not a target counting bot.")
             return
 
-        embed = message.embeds
+        # FIXED: Extract the actual single embed object out of the list container safely
+        embed = message.embeds[0]
         guild = message.guild
         member = None
         target_user_id = None
@@ -219,7 +220,6 @@ async def on_message(message):
 
         # Target 1: Official Counting Bot (Pure Numbers & C1 Access)
         if message.author.id == COUNTING_BOT_ID:
-            # FIXED REGEX: Account for potential markdown asterisks inside the string
             match = re.search(r'Score:\s*(?:\*\*)?([\d,]+)(?:\*\*)?', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
@@ -259,7 +259,6 @@ async def on_message(message):
 
         # Target 2: Classic Counting Bot (Suffix "c" & C2 Access)
         elif message.author.id == CLASSIC_BOT_ID:
-            # FIXED REGEX: Account for potential markdown asterisks inside the string
             match = re.search(r'Score:\s*(?:\*\*)?([\d,]+)(?:\*\*)?', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
@@ -328,7 +327,8 @@ async def on_message(message):
 
     if input_number != (previous_number + 1) or message.author.id == last_user_id: return
     increment_global_score(message.author.id)
-    
+
+
     race = races_collection.find_one({"_id": f"race_{current_channel_str}"})
     if race:
         if race.get("start_time") is None:
