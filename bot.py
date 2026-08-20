@@ -140,7 +140,7 @@ async def check_and_announce_winners():
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}})
 # ==============================================================================
-# PART 5: CORE CHAT INTERCEPTOR & BOT EMBED PARSER
+# PART 5: CORE CHAT INTERCEPTOR & MARKDOWN-IMMUNE EMBED PARSER
 # ==============================================================================
 @bot.event
 async def on_ready():
@@ -156,14 +156,13 @@ async def on_message(message):
 
     # === C3 CHANNEL ROLE AUTOMATION PROCESSING ===
     if current_channel_str == c3 and message.embeds:
-        # LOG 1: Confirm the bot saw an embed message inside the c3 channel
         print(f"[LOG] Found an embed message in c3 from Author ID: {message.author.id}")
 
         if message.author.id not in [COUNTING_BOT_ID, CLASSIC_BOT_ID]:
             print(f"[LOG] Ignored embed: Author is not a target counting bot.")
             return
 
-        embed = message.embeds[0]
+        embed = message.embeds
         guild = message.guild
         member = None
         target_user_id = None
@@ -179,13 +178,12 @@ async def on_message(message):
             avatar_match = re.search(r'avatars/(\d+)/', avatar_url)
             if avatar_match:
                 target_user_id = int(avatar_match.group(1))
-                # LOG 2: Show the extracted User ID from the image link
                 print(f"[LOG] Successfully extracted User ID from avatar URL: {target_user_id}")
 
         if target_user_id:
             try:
                 member = await guild.fetch_member(target_user_id)
-                print(f"[LOG] Successfully fetched member from Discord API: {member.name}#{member.discriminator}")
+                print(f"[LOG] Successfully fetched member from Discord API: {member.name}")
             except Exception as e:
                 print(f"[LOG ERROR] Failed to fetch member via Avatar ID link: {e}")
 
@@ -217,12 +215,12 @@ async def on_message(message):
             print("[LOG] Aborted: Could not find 'Global Stats' text section inside the embed fields or description.")
             return
 
-        # LOG 3: Show the exact text block we are about to scan with Regex
         print(f"[LOG] Scanning Global Stats Text block:\n{global_stats_text}")
 
         # Target 1: Official Counting Bot (Pure Numbers & C1 Access)
         if message.author.id == COUNTING_BOT_ID:
-            match = re.search(r'Score:\s*([\d,]+)', global_stats_text)
+            # FIXED REGEX: Account for potential markdown asterisks inside the string
+            match = re.search(r'Score:\s*(?:\*\*)?([\d,]+)(?:\*\*)?', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
                 print(f"[LOG Regular] Regex matched! Found score value: {score}")
@@ -261,7 +259,8 @@ async def on_message(message):
 
         # Target 2: Classic Counting Bot (Suffix "c" & C2 Access)
         elif message.author.id == CLASSIC_BOT_ID:
-            match = re.search(r'Score:\s*([\d,]+)', global_stats_text)
+            # FIXED REGEX: Account for potential markdown asterisks inside the string
+            match = re.search(r'Score:\s*(?:\*\*)?([\d,]+)(?:\*\*)?', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
                 print(f"[LOG Classic] Regex matched! Found score value: {score}")
@@ -329,7 +328,7 @@ async def on_message(message):
 
     if input_number != (previous_number + 1) or message.author.id == last_user_id: return
     increment_global_score(message.author.id)
-
+    
     race = races_collection.find_one({"_id": f"race_{current_channel_str}"})
     if race:
         if race.get("start_time") is None:
