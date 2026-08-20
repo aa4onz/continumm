@@ -1,5 +1,7 @@
 
-
+# ==============================================================================
+# PART 1: CLIENT INITIALIZATION & BOT INSTANTIATION
+# ==============================================================================
 import os
 import re
 import asyncio
@@ -25,35 +27,39 @@ class CountingBot(commands.Bot):
         print("Slash commands synced globally successfully!")
 
 bot = CountingBot()
+
+
+# ==============================================================================
+# PART 2: ENVIRONMENTAL VARIABLES & ROLE MILESTONE TIERS
+# ==============================================================================
 TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
 
 
+
 COUNTING_BOT_ID = 510016054391734273        # Official Counting Bot ID
 CLASSIC_BOT_ID = 639599059036012605          # Classic Counting Bot ID
+c1 = str(os.getenv('c1')).strip()            # Regular Counting Channel ID
+c2 = str(os.getenv('c2')).strip()            # Classic Counting Channel ID
+c3 = str(os.getenv('c3')).strip()            # Bot Command Channel ID (#c-command)
 
-# Fetch numeric channel settings from your Railway Environment Strings
-c1 = str(os.getenv('c1')).strip()            # Regular Counting Channel (Locked by default, open to 25k)
-c2 = str(os.getenv('c2')).strip()            # Classic Counting Channel (Locked by default, open to 25kc)
-c3 = str(os.getenv('c3')).strip()            # The dedicated stats command channel (#c-command)
-
-# Group game rooms for the 14-day tournament pool evaluation
 COUNTING_CHANNELS = [c1, c2]
 
-# Tier Configuration Boundaries
 STANDARD_TIERS = [
     (3000000, 3999999, "3000000"), (2000000, 2999999, "2000000"),
     (1000000, 1999999, "1000000"), (750000,  999999,  "750000"),
     (500000,  749999,  "500000"),  (250000,  499999,  "250000"),
-    (100000,  249999,  "100000"),  (75000,   99999,   "75000"),
-    (50000,   74999,   "50000"),   (25000,   49999,   "25000"),
     (10000,   24999,   "10000"),   (5000,    9999,    "5000")
 ]
 
 CLASSIC_TIERS = [(min_v, max_v, f"{name}c") for min_v, max_v, name in STANDARD_TIERS]
 
-ALL_STANDARD_NAMES = [t[2] for t in STANDARD_TIERS]
-ALL_CLASSIC_NAMES = [t[2] for t in CLASSIC_TIERS]
+ALL_STANDARD_NAMES = [t for t in STANDARD_TIERS]
+ALL_CLASSIC_NAMES = [t for t in CLASSIC_TIERS]
+
+# ==============================================================================
+# PART 3: CLOUD STORAGE DATABASE CONNECTIONS
+# ==============================================================================
 try:
     mongo_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
     db = mongo_client["counting_bot_db"]
@@ -68,6 +74,9 @@ except Exception as e:
 
 scheduler = AsyncIOScheduler()
 
+# ==============================================================================
+# PART 4: BACKGROUND JOBS & SCORING MATRICES
+# ==============================================================================
 def get_tournament_deadline():
     timer = system_collection.find_one({"_id": "global_tournament"})
     if not timer:
@@ -76,6 +85,7 @@ def get_tournament_deadline():
         system_collection.insert_one(new_timer)
         return new_timer
     return timer
+
 def increment_global_score(user_id):
     leaderboard_collection.update_one(
         {"_id": str(user_id)},  
@@ -118,9 +128,12 @@ async def check_and_announce_winners():
     leaderboard_collection.delete_many({})
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}})
+# ==============================================================================
+# PART 5: CORE CHAT INTERCEPTOR & BOT EMBED PARSER
+# ==============================================================================
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}! 3-Channel system is fully active.')
+    print(f'Logged in as {bot.user.name}! 3-Channel context-aware system active.')
     get_tournament_deadline()
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
@@ -132,41 +145,58 @@ async def on_message(message):
 
     # === C3 CHANNEL ROLE AUTOMATION PROCESSING ===
     if current_channel_str == c3 and message.embeds:
+        if message.author.id not in [COUNTING_BOT_ID, CLASSIC_BOT_ID]:
+            return
+
         embed = message.embeds[0]
-        username = None
-        
-        # Pull the target nickname securely from the embed title/author block
-        if embed.author and embed.author.name:
-            username = embed.author.name
-        elif embed.title:
-            username = embed.title
-
-        if not username: return
         guild = message.guild
-        member = discord.utils.get(guild.members, name=username) or discord.utils.get(guild.members, display_name=username)
-        
-        if not member:
-            for m in guild.members:
-                if m.name.lower() in username.lower() or username.lower() in m.name.lower():
-                    member = m
-                    break
-        if not member: return
+        member = None
+        target_user_id = None
 
-        # Loop through fields individually to look directly inside the "Global Stats" text block
+        # Extract User ID securely from the Embed Thumbnail or Author Icon URL
+        avatar_url = ""
+        if embed.thumbnail and embed.thumbnail.url:
+            avatar_url = embed.thumbnail.url
+        elif embed.author and embed.author.icon_url:
+            avatar_url = embed.author.icon_url
+
+        if avatar_url:
+            avatar_match = re.search(r'avatars/(\d+)/', avatar_url)
+            if avatar_match:
+                target_user_id = int(avatar_match.group(1))
+
+        if target_user_id:
+            try:
+                member = await guild.fetch_member(target_user_id)
+            except Exception as e:
+                print(f"Failed to fetch member via Avatar ID link: {e}")
+
+        # Fallback Check: Reply link context
+        if not member and message.reference and message.reference.message_id:
+            try:
+                original_msg = await message.channel.fetch_message(message.reference.message_id)
+                member = original_msg.author
+            except:
+                pass
+
+        if not member: 
+            print("[Warning] Embed found, but could not identify the target owner.")
+            return
+
+        # Loop through columns individually to inspect the "Global Stats" panel text
         global_stats_text = ""
         for field in embed.fields:
             if "Global Stats" in field.name:
                 global_stats_text = field.value
                 break
 
-        # If Global Stats column wasn't in the fields, fallback check description text
         if not global_stats_text and embed.description:
             if "Global Stats" in embed.description:
                 global_stats_text = embed.description
 
         if not global_stats_text: return
 
-        # Target 1: Official Counting Bot (Pure Numbers & C1 Reward Access)
+        # Target 1: Official Counting Bot (Pure Numbers & C1 Access)
         if message.author.id == COUNTING_BOT_ID:
             match = re.search(r'Score:\s*([\d,]+)', global_stats_text)
             if match:
@@ -193,7 +223,7 @@ async def on_message(message):
                         try: await message.delete(); await msg.delete()
                         except: pass
 
-        # Target 2: Classic Counting Bot (Suffix "c" & C2 Reward Access)
+        # Target 2: Classic Counting Bot (Suffix "c" & C2 Access)
         elif message.author.id == CLASSIC_BOT_ID:
             match = re.search(r'Score:\s*([\d,]+)', global_stats_text)
             if match:
@@ -257,6 +287,9 @@ async def on_message(message):
         if race.get("start_time") is None:
             races_collection.update_one({"_id": f"race_{current_channel_str}"}, {"$set": {"start_time": datetime.now(timezone.utc)}})
         log_race_contribution(current_channel_str, message.author.id)
+# ==============================================================================
+# PART 6: COMPUTATION MODULES & CALCULATION ENGINE LOGIC
+# ==============================================================================
 def get_channel_and_guild(ctx_or_interaction):
     if isinstance(ctx_or_interaction, commands.Context):
         return ctx_or_interaction.channel, ctx_or_interaction.guild, ctx_or_interaction
@@ -388,6 +421,9 @@ async def lb_logic(ctx_or_interaction):
     embed.set_footer(text=f"Time remaining in tournament: {max(0, (end_date - datetime.now(timezone.utc)).days)} Days")
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
     else: await responder.send_message(embed=embed)
+# ==============================================================================
+# PART 7: LEGACY TEXT COMMANDS ROUTING ENGINE
+# ==============================================================================
 @bot.command(name='run')
 async def text_run(ctx): await run_logic(ctx)
 
@@ -424,6 +460,9 @@ async def text_reset(ctx):
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}}, upsert=True)
     await ctx.send("🔄 **Tournament Reset!** Global tournament scoreboard completely wiped clean.")
+# ==============================================================================
+# PART 8: NATIVE SLASH COMMANDS ARCHITECTURE MAP
+# ==============================================================================
 @bot.tree.command(name='run', description='Starts a local channel race track.')
 async def slash_run(interaction: discord.Interaction): await run_logic(interaction)
 
@@ -466,3 +505,4 @@ async def slash_reset(interaction: discord.Interaction):
     await interaction.response.send_message("🔄 **Tournament Reset!** Global tournament scoreboard completely wiped clean.")
 
 bot.run(TOKEN)
+
