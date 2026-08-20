@@ -14,9 +14,11 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
+c1 = os.gentenv('c1')
+c2 = os.getenv('c2')
 
 # ADD YOUR TWO CHANNEL IDs HERE (Keep them as integers)
-COUNTING_CHANNELS = [123456789012345678, 987654321098765432]
+COUNTING_CHANNELS = [c1,c2]
 
 try:
     mongo_client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
