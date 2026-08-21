@@ -31,15 +31,16 @@ bot = CountingBot()
 
 
 
+
+
 # ==============================================================================
 # PART 2: ENVIRONMENTAL VARIABLES & ROLE MILESTONE TIERS
 # ==============================================================================
 TOKEN = os.getenv('DISCORD_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
 
-
 COUNTING_BOT_ID = 510016054391734273        # Official Counting Bot ID
-CLASSIC_BOT_ID = 639599059036012605          # Classic Counting Bot ID
+CLASSIC_BOT_ID = 639599059036012605          # Classic Counting Bot IDD
 
 c1 = str(os.getenv('c1')).strip()            # Regular Counting Channel ID
 c2 = str(os.getenv('c2')).strip()            # Classic Counting Channel ID
@@ -47,26 +48,26 @@ c3 = str(os.getenv('c3')).strip()            # Bot Command Channel ID (#c-comman
 
 COUNTING_CHANNELS = [c1, c2]
 
-# FIXED: All gaps closed. Your 66,210 score now matches the 50000 tier perfectly!
+# Lightning-fast local memory cache to eliminate database lag and internet latency
+MEMORY_STREAKS = {
+    c1: {"current_count": None, "last_user_id": None},
+    c2: {"current_count": None, "last_user_id": None}
+}
+
 STANDARD_TIERS = [
-    (3000000, 3999999, "3000000"), 
-    (2000000, 2999999, "2000000"),
-    (1000000, 1999999, "1000000"), 
-    (750000,  999999,  "750000"),
-    (500000,  749999,  "500000"),  
-    (250000,  499999,  "250000"),
-    (100000,  249999,  "100000"),  
-    (75000,   99999,   "75000"),
-    (50000,   74999,   "50000"),   
-    (25000,   49999,   "25000"),
-    (10000,   24999,   "10000"),   
-    (5000,    9999,    "5000")
+    (3000000, 3999999, "3000000"), (2000000, 2999999, "2000000"),
+    (1000000, 1999999, "1000000"), (750000,  999999,  "750000"),
+    (500000,  749999,  "500000"),  (250000,  499999,  "250000"),
+    (100000,  249999,  "100000"),  (75000,   99999,   "75000"),
+    (50000,   74999,   "50000"),   (25000,   49999,   "25000"),
+    (10000,   24999,   "10000"),   (5000,    9999,    "5000")
 ]
 
 CLASSIC_TIERS = [(min_v, max_v, f"{name}c") for min_v, max_v, name in STANDARD_TIERS]
 
-ALL_STANDARD_NAMES = [t[2] for t in STANDARD_TIERS]
-ALL_CLASSIC_NAMES = [t[2] for t in CLASSIC_TIERS]
+ALL_STANDARD_NAMES = [t for t in STANDARD_TIERS]
+ALL_CLASSIC_NAMES = [t for t in CLASSIC_TIERS]
+]
 
 # ==============================================================================
 # PART 3: CLOUD STORAGE DATABASE CONNECTIONS
@@ -140,11 +141,13 @@ async def check_and_announce_winners():
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}})
 # ==============================================================================
-# PART 5: CORE CHAT INTERCEPTOR & SILENT USERNAME-BASED EMBED PARSER
+# PART 5: CORE CHAT INTERCEPTOR & MEMORY-CACHED PARSER
 # ==============================================================================
+import time
+
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name}! Silent username-based role system active.')
+    print(f'Logged in as {bot.user.name}! Lag-free tracking matrix initialized.')
     get_tournament_deadline()
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
@@ -156,103 +159,77 @@ async def on_message(message):
 
     # === C3 CHANNEL ROLE AUTOMATION PROCESSING ===
     if current_channel_str == c3 and message.embeds:
-        # Ignore embeds if they are not from the two target bots
         if message.author.id not in [COUNTING_BOT_ID, CLASSIC_BOT_ID]:
             return
 
-        embed = message.embeds[0]
+        embed = message.embeds
         guild = message.guild
         member = None
 
-        # Extract the exact unique username from the embed title or embed author field
         raw_text_name = ""
-        if embed.title:
-            raw_text_name = embed.title
-        elif embed.author and embed.author.name:
-            raw_text_name = embed.author.name
+        if embed.title: raw_text_name = embed.title
+        elif embed.author and embed.author.name: raw_text_name = embed.author.name
 
         if raw_text_name:
-            # Clean away common extra formatting phrases if the bot adds them
             cleaned_name = re.sub(r"(Stats for|'s Stats|'s stats|Stats of|stats)", "", raw_text_name, flags=re.IGNORECASE).strip()
-            print(f"[LOG] Searching server for unique global username: '{cleaned_name}'")
-
-            # Force an on-demand API query to find the exact user in the server roster by real name
             try:
                 query_results = await guild.query_members(query=cleaned_name, limit=1)
-                if query_results:
-                    member = query_results[0]
-                    print(f"[LOG Success] Found member using unique username lookup: {member.name}")
-            except Exception as e:
-                print(f"[LOG ERROR] Member text query failed: {e}")
+                if query_results: member = query_results
+            except: pass
 
-        # If the member cannot be found in the server cache or query, cancel processing safely
-        if not member: 
-            return
+        if not member: return
 
-        # Loop through columns individually to inspect the "Global Stats" panel text
         global_stats_text = ""
         for field in embed.fields:
             if "Global Stats" in field.name:
                 global_stats_text = field.value
                 break
-
         if not global_stats_text and embed.description:
-            if "Global Stats" in embed.description:
-                global_stats_text = embed.description
+            if "Global Stats" in embed.description: global_stats_text = embed.description
 
         if not global_stats_text: return
 
-        # Target 1: Official Counting Bot (Pure Numbers & C1 Access)
         if message.author.id == COUNTING_BOT_ID:
             match = re.search(r'Score:\s*(?:\*\*)?([\d,]+)(?:\*\*)?', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
-                
                 target_role = None
                 for min_v, max_v, name in STANDARD_TIERS:
                     if min_v <= score <= max_v:
                         target_role = name
                         break
-                
                 if target_role:
                     role = discord.utils.get(guild.roles, name=target_role)
                     if not role:
-                        role = await guild.create_role(name=target_role, colour=discord.Colour.purple(), reason="Automated milestone tier role.")
-                        if int(target_role) >= 25000 and c1:
+                        role = await guild.create_role(name=target_role, colour=discord.Colour.purple())
+                        if int(target_role) >= 50000 and c1:
                             target_ch = guild.get_channel(int(c1))
                             if target_ch: await target_ch.set_permissions(role, view_channel=True, send_messages=True)
-                    
                     removals = [r for r in member.roles if r.name in ALL_STANDARD_NAMES and r.name != target_role]
                     if role not in member.roles:
                         if removals: await member.remove_roles(*removals)
                         await member.add_roles(role)
-                        print(f"[SUCCESS SILENT] Assigned role {target_role} to {member.name}")
 
-        # Target 2: Classic Counting Bot (Suffix "c" & C2 Access)
         elif message.author.id == CLASSIC_BOT_ID:
             match = re.search(r'Score:\s*(?:\*\*)?([\d,]+)(?:\*\*)?', global_stats_text)
             if match:
                 score = int(match.group(1).replace(',', ''))
-                
                 target_role = None
                 for min_v, max_v, name in CLASSIC_TIERS:
                     if min_v <= score <= max_v:
                         target_role = name
                         break
-                
                 if target_role:
                     role = discord.utils.get(guild.roles, name=target_role)
                     if not role:
-                        role = await guild.create_role(name=target_role, colour=discord.Colour.blue(), reason="Automated classic tier role.")
-                        if int(target_role.replace('c','')) >= 25000 and c2:
+                        role = await guild.create_role(name=target_role, colour=discord.Colour.blue())
+                        if int(target_role.replace('c','')) >= 50000 and c2:
                             target_ch = guild.get_channel(int(c2))
                             if target_ch: await target_ch.set_permissions(role, view_channel=True, send_messages=True)
-                    
                     removals = [r for r in member.roles if r.name in ALL_CLASSIC_NAMES and r.name != target_role]
                     if role not in member.roles:
                         if removals: await member.remove_roles(*removals)
                         await member.add_roles(role)
-                        print(f"[SUCCESS SILENT] Assigned classic role {target_role} to {member.name}")
         return
 
     # === GAME CHANNELS PROGRESSIVE COUNTING PROCESSING (C1 & C2) ===
@@ -260,7 +237,7 @@ async def on_message(message):
     if "You have used 1 guild save!" in message.content:
         try:
             await message.channel.set_permissions(message.guild.default_role, send_messages=False)
-            await message.channel.send("🔒 **Channel Locked!**")
+            await message.channel.send("🔒 **Channel Locked! wait... **.")
         except: pass
         return
 
@@ -273,23 +250,35 @@ async def on_message(message):
         if str(input_number) != content: return
     except ValueError: return
 
-    previous_number, last_user_id = 0, None
-    async for msg in message.channel.history(limit=20):
-        if msg.id == message.id or msg.author.bot: continue
-        try:
-            previous_number = int(msg.content.strip())
-            if str(previous_number) == msg.content.strip():
-                last_user_id = msg.author.id
-                break
-        except ValueError: continue
+    # INSTANT CACHE PROCESSING (Zero Internet Lag)
+    cache = MEMORY_STREAKS[current_channel_str]
+    
+    # Auto-initialize baseline state if memory is empty
+    if cache["current_count"] is None:
+        cache["current_count"] = input_number - 1
+        cache["last_user_id"] = None
 
-    if input_number != (previous_number + 1) or message.author.id == last_user_id: return
+    expected_number = cache["current_count"] + 1
+
+    # Standard sequencing enforcement rules
+    if input_number != expected_number or message.author.id == cache["last_user_id"]:
+        # Sequence break: Reset memory cache baseline matching the mistake
+        cache["current_count"] = input_number
+        cache["last_user_id"] = message.author.id
+        return
+
+    # Commit memory validation benchmarks instantly
+    cache["current_count"] = input_number
+    cache["last_user_id"] = message.author.id
+
+    # Award points seamlessly
     increment_global_score(message.author.id)
 
+    # Fast Race Tracking Module
     race = races_collection.find_one({"_id": f"race_{current_channel_str}"})
     if race:
         if race.get("start_time") is None:
-            races_collection.update_one({"_id": f"race_{current_channel_str}"}, {"$set": {"start_time": datetime.now(timezone.utc)}})
+            races_collection.update_one({"_id": f"race_{current_channel_str}"}, {"$set": {"start_time": time.time()}})
         log_race_contribution(current_channel_str, message.author.id)
 
 # ==============================================================================
@@ -330,7 +319,12 @@ async def yay_logic(ctx_or_interaction):
         return
 
     start_time = race.get("start_time")
-    duration_hours = max((datetime.now(timezone.utc) - start_time.replace(tzinfo=timezone.utc)).total_seconds() / 3600.0, 0.0001) if start_time else 0.0001
+    if start_time is None:
+        duration_hours = 0.0001
+    else:
+        total_seconds_elapsed = time.time() - float(start_time)
+        duration_hours = max(total_seconds_elapsed / 3600.0, 0.0001)
+
     total_counts = race.get("total_counts", 0)
     final_pace = round(total_counts / duration_hours, 1)
 
@@ -357,6 +351,10 @@ async def yay_logic(ctx_or_interaction):
         })
 
     races_collection.delete_one({"_id": f"race_{channel_id_str}"})
+    
+    # Wipe the local memory cache baseline matching the end of the speed track session
+    MEMORY_STREAKS[channel_id_str] = {"current_count": None, "last_user_id": None}
+    
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
     else: await responder.send_message(embed=embed)
 
@@ -371,13 +369,22 @@ async def pace_logic(ctx_or_interaction):
     for race in active_races:
         ch_id = race["channel_id"]
         start_time = race.get("start_time")
-        current_pace = round(race.get("total_counts", 0) / max((datetime.now(timezone.utc) - start_time.replace(tzinfo=timezone.utc)).total_seconds() / 3600.0, 0.0001), 1) if start_time else 0.0
+        
+        if start_time is None:
+            current_pace = 0.0
+        else:
+            total_seconds_elapsed = time.time() - float(start_time)
+            elapsed_hours = max(total_seconds_elapsed / 3600.0, 0.0001)
+            current_pace = round(race.get("total_counts", 0) / elapsed_hours, 1)
         
         players = race.get("players", {})
         mvp_display = "None"
         if players:
             sorted_players = sorted(players.items(), key=lambda item: item[1], reverse=True)
-            mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} drops)" + (f"\n2. <@{sorted_players[1][0]}> ({sorted_players[1][1]} drops)" if len(sorted_players) >= 2 else "")
+            if len(sorted_players) >= 2:
+                mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} drops)\n2. <@{sorted_players[1][0]}> ({sorted_players[1][1]} drops)"
+            else:
+                mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} drops)"
 
         field_value = f"• **Current Speed:** `{current_pace} counts/hr`\n• **drops:** `{race.get('total_counts', 0)}`\n• **Top 2 Counters:**\n{mvp_display}"
         channel_obj = bot.get_channel(int(ch_id))
@@ -426,6 +433,7 @@ async def lb_logic(ctx_or_interaction):
     embed.set_footer(text=f"remaining: {max(0, (end_date - datetime.now(timezone.utc)).days)} Days")
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
     else: await responder.send_message(embed=embed)
+
 # ==============================================================================
 # PART 7: LEGACY TEXT COMMANDS ROUTING ENGINE
 # ==============================================================================
