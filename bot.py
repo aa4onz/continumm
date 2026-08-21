@@ -65,8 +65,8 @@ STANDARD_TIERS = [
 
 CLASSIC_TIERS = [(min_v, max_v, f"{name}c") for min_v, max_v, name in STANDARD_TIERS]
 
-ALL_STANDARD_NAMES = [t for t in STANDARD_TIERS]
-ALL_CLASSIC_NAMES = [t for t in CLASSIC_TIERS]
+ALL_STANDARD_NAMES = [t[2] for t in STANDARD_TIERS]
+ALL_CLASSIC_NAMES = [t[2] for t in CLASSIC_TIERS]
 
 
 # ==============================================================================
@@ -162,7 +162,7 @@ async def on_message(message):
         if message.author.id not in [COUNTING_BOT_ID, CLASSIC_BOT_ID]:
             return
 
-        embed = message.embeds
+        embed = message.embeds[0] if isinstance(message.embeds, list) else message.embeds
         guild = message.guild
         member = None
 
@@ -174,7 +174,7 @@ async def on_message(message):
             cleaned_name = re.sub(r"(Stats for|'s Stats|'s stats|Stats of|stats)", "", raw_text_name, flags=re.IGNORECASE).strip()
             try:
                 query_results = await guild.query_members(query=cleaned_name, limit=1)
-                if query_results: member = query_results
+                if query_results: member = query_results[0]
             except: pass
 
         if not member: return
@@ -202,10 +202,11 @@ async def on_message(message):
                     role = discord.utils.get(guild.roles, name=target_role)
                     if not role:
                         role = await guild.create_role(name=target_role, colour=discord.Colour.purple())
-                        if int(target_role) >= 50000 and c1:
+                        # Auto-unlock permission access down to 10000 score
+                        if int(target_role) >= 10000 and c1:
                             target_ch = guild.get_channel(int(c1))
                             if target_ch: await target_ch.set_permissions(role, view_channel=True, send_messages=True)
-                    removals = [r for r in member.roles if r.name in ALL_STANDARD_NAMES and r.name != target_role]
+                    removals = [r for r in member.roles if r.name in [t[2] for t in ALL_STANDARD_NAMES] and r.name != target_role]
                     if role not in member.roles:
                         if removals: await member.remove_roles(*removals)
                         await member.add_roles(role)
@@ -223,10 +224,11 @@ async def on_message(message):
                     role = discord.utils.get(guild.roles, name=target_role)
                     if not role:
                         role = await guild.create_role(name=target_role, colour=discord.Colour.blue())
-                        if int(target_role.replace('c','')) >= 50000 and c2:
+                        # Auto-unlock permission access down to 10000c score
+                        if int(target_role.replace('c','')) >= 10000 and c2:
                             target_ch = guild.get_channel(int(c2))
                             if target_ch: await target_ch.set_permissions(role, view_channel=True, send_messages=True)
-                    removals = [r for r in member.roles if r.name in ALL_CLASSIC_NAMES and r.name != target_role]
+                    removals = [r for r in member.roles if r.name in [t[2] for t in ALL_CLASSIC_NAMES] and r.name != target_role]
                     if role not in member.roles:
                         if removals: await member.remove_roles(*removals)
                         await member.add_roles(role)
@@ -280,6 +282,7 @@ async def on_message(message):
         if race.get("start_time") is None:
             races_collection.update_one({"_id": f"race_{current_channel_str}"}, {"$set": {"start_time": time.time()}})
         log_race_contribution(current_channel_str, message.author.id)
+
 
 # ==============================================================================
 # PART 6: COMPUTATION MODULES & CALCULATION ENGINE LOGIC
@@ -433,6 +436,7 @@ async def lb_logic(ctx_or_interaction):
     embed.set_footer(text=f"remaining: {max(0, (end_date - datetime.now(timezone.utc)).days)} Days")
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
     else: await responder.send_message(embed=embed)
+
 
 # ==============================================================================
 # PART 7: LEGACY TEXT COMMANDS ROUTING ENGINE
