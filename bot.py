@@ -475,6 +475,12 @@ async def text_lock(ctx):
         role = discord.utils.get(ctx.guild.roles, name=role_name)
         if role: await ctx.channel.set_permissions(role, send_messages=False)
         
+    # 3. WHITELIST EXTERNAL COUNTING BOTS SO THEY NEVER GET LOCKED OUT
+    for bot_id in [int(COUNTING_BOT_ID), int(CLASSIC_BOT_ID)]:
+        bot_member = ctx.guild.get_member(bot_id)
+        if bot_member:
+            await ctx.channel.set_permissions(bot_member, view_channel=True, send_messages=True, add_reactions=True)
+        
     await ctx.send("🔒 **Channel Locked!** wait...")
 
 @bot.command(name='unlock')
@@ -482,7 +488,7 @@ async def text_lock(ctx):
 async def text_unlock(ctx):
     if str(ctx.channel.id) not in COUNTING_CHANNELS: return
     
-    # FIX 1: Explicitly force everyone role to stay LOCKED so unverified members cannot count
+    # 1. Explicitly force everyone role to stay LOCKED so unverified members cannot count
     await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
     
     # 2. Restore individual permissions back to their active tier parameters
@@ -490,7 +496,7 @@ async def text_unlock(ctx):
         role_name = tier[2]
         role = discord.utils.get(ctx.guild.roles, name=role_name)
         if role:
-            # FIX 2: Threshold lowered from 25000 down to 10000 for standard tracking
+            # Threshold lowered down to 10000 for standard tracking inside c1
             if int(role_name) >= 10000 and str(ctx.channel.id) == c1:
                 await ctx.channel.set_permissions(role, view_channel=True, send_messages=True)
             else:
@@ -501,11 +507,17 @@ async def text_unlock(ctx):
         role = discord.utils.get(ctx.guild.roles, name=role_name)
         if role:
             val = int(role_name.replace('c',''))
-            # FIX 3: Threshold lowered from 25000 down to 10000 for classic tracking
+            # Threshold lowered down to 10000 for classic tracking inside c2
             if val >= 10000 and str(ctx.channel.id) == c2:
                 await ctx.channel.set_permissions(role, view_channel=True, send_messages=True)
             else:
                 await ctx.channel.set_permissions(role, overwrite=None)
+                
+    # 3. WHITELIST EXTERNAL COUNTING BOTS SO THEY NEVER GET UNINTENTIALLY OVERWRITTEN
+    for bot_id in [int(COUNTING_BOT_ID), int(CLASSIC_BOT_ID)]:
+        bot_member = ctx.guild.get_member(bot_id)
+        if bot_member:
+            await ctx.channel.set_permissions(bot_member, view_channel=True, send_messages=True, add_reactions=True)
                 
     await ctx.send("🔓 **Channel Unlocked for 10k+ Counters!**")
 
@@ -557,6 +569,12 @@ async def slash_lock(interaction: discord.Interaction):
         role = discord.utils.get(interaction.guild.roles, name=role_name)
         if role: await interaction.channel.set_permissions(role, send_messages=False)
         
+    # 3. WHITELIST EXTERNAL COUNTING BOTS VIA SLASH LOCK
+    for bot_id in [int(COUNTING_BOT_ID), int(CLASSIC_BOT_ID)]:
+        bot_member = interaction.guild.get_member(bot_id)
+        if bot_member:
+            await interaction.channel.set_permissions(bot_member, view_channel=True, send_messages=True, add_reactions=True)
+        
     await interaction.followup.send("🔒 **Channel Locked!**")
 
 @bot.tree.command(name='unlock', description='unlocks the counting channel')
@@ -567,7 +585,7 @@ async def slash_unlock(interaction: discord.Interaction):
         return
         
     await interaction.response.defer()
-    # FIX 4: Explicitly force everyone role to stay LOCKED so unverified members cannot count
+    # 1. Explicitly force everyone role to stay LOCKED so unverified members cannot count
     await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
     
     # 2. Restore individual view/send permissions back to their active tier parameters via Slash
@@ -575,7 +593,7 @@ async def slash_unlock(interaction: discord.Interaction):
         role_name = tier_info[2]
         role = discord.utils.get(interaction.guild.roles, name=role_name)
         if role:
-            # FIX 5: Threshold lowered from 25000 down to 10000 for standard tracking
+            # Threshold lowered down to 10000 for standard tracking inside c1
             if int(role_name) >= 10000 and str(interaction.channel.id) == c1:
                 await interaction.channel.set_permissions(role, view_channel=True, send_messages=True)
             else:
@@ -586,13 +604,19 @@ async def slash_unlock(interaction: discord.Interaction):
         role = discord.utils.get(interaction.guild.roles, name=role_name)
         if role:
             val = int(role_name.replace('c',''))
-            # FIX 6: Threshold lowered from 25000 down to 10000 for classic tracking
+            # Threshold lowered down to 10000 for classic tracking inside c2
             if val >= 10000 and str(interaction.channel.id) == c2:
                 await interaction.channel.set_permissions(role, view_channel=True, send_messages=True)
             else:
                 await interaction.channel.set_permissions(role, overwrite=None)
                 
-    await interaction.followup.send("🔓 **Unlocked!**")
+    # 3. WHITELIST EXTERNAL COUNTING BOTS VIA SLASH UNLOCK
+    for bot_id in [int(COUNTING_BOT_ID), int(CLASSIC_BOT_ID)]:
+        bot_member = interaction.guild.get_member(bot_id)
+        if bot_member:
+            await interaction.channel.set_permissions(bot_member, view_channel=True, send_messages=True, add_reactions=True)
+                
+    await interaction.followup.send("🔓 **Channel Unlocked for 10k+ Counters!**")
 
 @bot.tree.command(name='reset', description='manually wipes the 14day game scoreboard and restarts yay.')
 @app_commands.checks.has_permissions(administrator=True)
@@ -601,6 +625,5 @@ async def slash_reset(interaction: discord.Interaction):
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}}, upsert=True)
     await interaction.response.send_message("**game reset!** clean clean clean.")
-
 
 bot.run(TOKEN)
