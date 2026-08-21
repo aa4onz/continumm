@@ -450,7 +450,7 @@ async def text_yay(ctx): await yay_logic(ctx)
 @bot.command(name='pace')
 async def text_pace(ctx): await pace_logic(ctx)
 
-@bot.command(name='toprun')
+@bot.command(name='topruns')
 async def text_toprun(ctx): await toprun_logic(ctx)
 
 @bot.command(name='lb')
@@ -541,7 +541,7 @@ async def slash_yay(interaction: discord.Interaction): await yay_logic(interacti
 @bot.tree.command(name='pace', description='running races.')
 async def slash_pace(interaction: discord.Interaction): await pace_logic(interaction)
 
-@bot.tree.command(name='toprun', description='top 10 fastest races.')
+@bot.tree.command(name='topruns', description='top 10 fastest races.')
 async def slash_toprun(interaction: discord.Interaction): await toprun_logic(interaction)
 
 @bot.tree.command(name='lb', description='14day server leaderboard')
@@ -616,7 +616,7 @@ async def slash_unlock(interaction: discord.Interaction):
         if bot_member:
             await interaction.channel.set_permissions(bot_member, view_channel=True, send_messages=True, add_reactions=True)
                 
-    await interaction.followup.send("🔓 **Channel Unlocked for 10k+ Counters!**")
+    await interaction.followup.send("**Channel Unlocked**")
 
 @bot.tree.command(name='reset', description='manually wipes the 14day game scoreboard and restarts yay.')
 @app_commands.checks.has_permissions(administrator=True)
