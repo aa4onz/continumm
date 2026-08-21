@@ -67,7 +67,7 @@ CLASSIC_TIERS = [(min_v, max_v, f"{name}c") for min_v, max_v, name in STANDARD_T
 
 ALL_STANDARD_NAMES = [t for t in STANDARD_TIERS]
 ALL_CLASSIC_NAMES = [t for t in CLASSIC_TIERS]
-]
+
 
 # ==============================================================================
 # PART 3: CLOUD STORAGE DATABASE CONNECTIONS
