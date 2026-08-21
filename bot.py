@@ -385,11 +385,11 @@ async def pace_logic(ctx_or_interaction):
         if players:
             sorted_players = sorted(players.items(), key=lambda item: item[1], reverse=True)
             if len(sorted_players) >= 2:
-                mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} drops)\n2. <@{sorted_players[1][0]}> ({sorted_players[1][1]} drops)"
+                mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} )\n2. <@{sorted_players[1][0]}> ({sorted_players[1][1]} )"
             else:
-                mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} drops)"
+                mvp_display = f"1. <@{sorted_players[0][0]}> ({sorted_players[0][1]} )"
 
-        field_value = f"• **Current Speed:** `{current_pace} counts/hr`\n• **drops:** `{race.get('total_counts', 0)}`\n• **Top 2 Counters:**\n{mvp_display}"
+        field_value = f"• **Current Speed:** `{current_pace} counts/hr`\n• **counts:** `{race.get('total_counts', 0)}`\n• **Top 2 :**\n{mvp_display}"
         channel_obj = bot.get_channel(int(ch_id))
         embed.add_field(name=f"🏁 Channel: #{channel_obj.name if channel_obj else ch_id}", value=field_value, inline=False)
         
@@ -422,14 +422,14 @@ async def lb_logic(ctx_or_interaction):
     if str(channel.id) in COUNTING_CHANNELS: return  
     top_users = list(leaderboard_collection.find().sort("correct_counts", -1).limit(10))
     timer = get_tournament_deadline()
-    embed = discord.Embed(title="🏆 server leaderboard(14 days)", color=discord.Color.blue())
+    embed = discord.Embed(title="server leaderboard(14 days)", color=discord.Color.blue())
     
     if not top_users: embed.description = "is empty :("
     else:
         leaderboard_text = ""
         medals = ["🥇", "🥈", "🥉"]
         for index, user_data in enumerate(top_users):
-            leaderboard_text += f"{medals[index] if index < 3 else f'`#{index + 1}`'} <@{user_data.get('_id')}> — {user_data.get('correct_counts')} total pts\n"
+            leaderboard_text += f"{medals[index] if index < 3 else f'`#{index + 1}`'} <@{user_data.get('_id')}> — {user_data.get('correct_counts')}\n"
         embed.description = leaderboard_text
 
     end_date = timer["end_date"].replace(tzinfo=timezone.utc) if timer["end_date"].tzinfo is None else timer["end_date"]
@@ -519,7 +519,7 @@ async def text_unlock(ctx):
         if bot_member:
             await ctx.channel.set_permissions(bot_member, view_channel=True, send_messages=True, add_reactions=True)
                 
-    await ctx.send("🔓 **Channel Unlocked for 10k+ Counters!**")
+    await ctx.send("🔓 **Channel Unlocked**")
 
 @bot.command(name='reset')
 @commands.has_permissions(administrator=True)
@@ -575,7 +575,7 @@ async def slash_lock(interaction: discord.Interaction):
         if bot_member:
             await interaction.channel.set_permissions(bot_member, view_channel=True, send_messages=True, add_reactions=True)
         
-    await interaction.followup.send("🔒 **Channel Locked!**")
+    await interaction.followup.send("**Channel Locked!**")
 
 @bot.tree.command(name='unlock', description='unlocks the counting channel')
 @app_commands.checks.has_permissions(administrator=True)
