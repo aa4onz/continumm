@@ -343,7 +343,7 @@ async def yay_logic(ctx_or_interaction):
         leaderboard_text = ""
         for index, (p_id, p_counts) in enumerate(sorted_players[:5]):
             leaderboard_text += f"`#{index+1}` <@{p_id}> — {p_counts} drops ({round(p_counts / duration_hours, 1)}/hr)\n"
-        embed.add_field(name="Standings", value=leaderboard_text, inline=False)
+        #embed.add_field(name="Standings", value=leaderboard_text, inline=False)
 
     if total_counts > 0:
         top_races_collection.insert_one({
