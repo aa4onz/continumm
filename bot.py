@@ -411,7 +411,7 @@ async def toprun_logic(ctx_or_interaction):
             mvp1, mvp2 = record.get("mvp1_id"), record.get("mvp2_id")
             mvp_text = f"<@{mvp1}>" if mvp1 else "None"
             if mvp2: mvp_text += f" & <@{mvp2}>"
-            leaderboard_text += f"{rank} **{round(record.get('pace', 0.0))} counts/hour** — ({record.get('total_counts')})counts  {mvp_text}\n"
+            leaderboard_text += f"{rank} **{round(record.get('pace', 0.0))} counts/hour** --- {mvp_text}\n"
         embed.description = leaderboard_text
 
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
