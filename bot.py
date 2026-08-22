@@ -131,7 +131,7 @@ async def check_and_announce_winners():
                 winner_score = top_user.get("correct_counts", 0)
                 embed = discord.Embed(
                     title="14days game ended",
-                    description=f"👑**Winner:** <@{winner_id}> score **{winner_score}**. ty for counting!",
+                    description=f"👑**Winner:** <@{winner_id}> counts **{winner_score}**. ty for counting!",
                     color=discord.Color.gold()
                 )
                 await channel.send(embed=embed)
@@ -378,7 +378,7 @@ async def pace_logic(ctx_or_interaction):
         else:
             total_seconds_elapsed = time.time() - float(start_time)
             elapsed_hours = max(total_seconds_elapsed / 3600.0, 0.0001)
-            current_pace = round(race.get("total_counts", 0) / elapsed_hours, 1)
+            current_pace = round(race.get("total_counts", 0) // elapsed_hours, 1)
         
         players = race.get("players", {})
         mvp_display = "None"
@@ -411,7 +411,7 @@ async def toprun_logic(ctx_or_interaction):
             mvp1, mvp2 = record.get("mvp1_id"), record.get("mvp2_id")
             mvp_text = f"<@{mvp1}>" if mvp1 else "None"
             if mvp2: mvp_text += f" & <@{mvp2}>"
-            leaderboard_text += f"{rank} **{record.get('pace', 0.0)}** — ({record.get('total_counts')}) | MVPs: {mvp_text}\n"
+            leaderboard_text += f"{rank} **{round(record.get('pace', 0.0))} counts/hour** — ({record.get('total_counts')})counts  {mvp_text}\n"
         embed.description = leaderboard_text
 
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
