@@ -79,6 +79,9 @@ try:
     system_collection = db["system_state"]
     races_collection = db["active_races"]
     top_races_collection = db["top_races"]
+    # Locate Part 3 and add this reference below your other collections:
+    alts_collection = db["account_links"]  # Maps alt_id -> main_id
+
     print("Connected to MongoDB Atlas successfully!")
 except Exception as e:
     print(f"Failed to connect to MongoDB: {e}")
@@ -97,18 +100,38 @@ def get_tournament_deadline():
         system_collection.insert_one(new_timer)
         return new_timer
     return timer
-
+'''
 def increment_global_score(user_id):
     leaderboard_collection.update_one(
         {"_id": str(user_id)},  
         {"$inc": {"correct_counts": 1}},
         upsert=True
     )
+'''
+def increment_global_score(user_id):
+    # Check if this user is a registered alt account
+    alt_record = db["account_links"].find_one({"_id": str(user_id)})
+    target_id = alt_record["main_id"] if alt_record else str(user_id)
 
+    leaderboard_collection.update_one(
+        {"_id": target_id},  
+        {"$inc": {"correct_counts": 1}},
+        upsert=True
+    )
+'''
 def log_race_contribution(channel_id, user_id):
     races_collection.update_one(
         {"_id": f"race_{channel_id}"},
         {"$inc": {f"players.{user_id}": 1, "total_counts": 1}}
+    )
+'''
+def log_race_contribution(channel_id, user_id):
+    alt_record = db["account_links"].find_one({"_id": str(user_id)})
+    target_id = alt_record["main_id"] if alt_record else str(user_id)
+
+    races_collection.update_one(
+        {"_id": f"race_{channel_id}"},
+        {"$inc": {f"players.{target_id}": 1, "total_counts": 1}}
     )
 
 async def check_and_announce_winners():
@@ -527,7 +550,47 @@ async def text_reset(ctx):
     leaderboard_collection.delete_many({})
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}}, upsert=True)
-    await ctx.send("🔄 **game reset!**")
+    await ctx.send("**game reset!**")
+# ==============================================================================
+# ADD TO PART 7: LEGACY TEXT COMMANDS ROUTING ENGINE
+# ==============================================================================
+@bot.command(name='alt')
+@commands.has_permissions(administrator=True)
+async def text_alt(ctx, main_user: discord.Member, alt_user: discord.Member):
+    # Save the mapping structure in your database cluster
+    db["account_links"].update_one(
+        {"_id": str(alt_user.id)},
+        {"$set": {"main_id": str(main_user.id), "linked_at": datetime.now(timezone.utc)}},
+        upsert=True
+    )
+    
+    # Assign the requested Role designation tag
+    role = discord.utils.get(ctx.guild.roles, name="alt")
+    if not role:
+        role = await ctx.guild.create_role(name="alt", colour=discord.Colour.dark_grey())
+    
+    await alt_user.add_roles(role)
+    await ctx.send(f"alt linked")
+
+# ==============================================================================
+# ADD TO PART 8: NATIVE SLASH COMMANDS ARCHITECTURE MAP
+# ==============================================================================
+@bot.tree.command(name='alt', description='link alt to main')
+@app_commands.checks.has_permissions(administrator=True)
+async def slash_alt(interaction: discord.Interaction, main_user: discord.Member, alt_user: discord.Member):
+    db["account_links"].update_one(
+        {"_id": str(alt_user.id)},
+        {"$set": {"main_id": str(main_user.id), "linked_at": datetime.now(timezone.utc)}},
+        upsert=True
+    )
+    
+    role = discord.utils.get(interaction.guild.roles, name="alt")
+    if not role:
+        role = await interaction.guild.create_role(name="alt", colour=discord.Colour.dark_grey())
+        
+    await alt_user.add_roles(role)
+    await interaction.response.send_message(f"alt linked")
+
 
 # ==============================================================================
 # PART 8: NATIVE SLASH COMMANDS ARCHITECTURE MAP
