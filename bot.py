@@ -444,7 +444,7 @@ async def lb_logic(ctx_or_interaction):
 @bot.command(name='run')
 async def text_run(ctx): await run_logic(ctx)
 
-@bot.command(name='yay')
+@bot.command(name='end')
 async def text_yay(ctx): await yay_logic(ctx)
 
 @bot.command(name='pace')
@@ -535,7 +535,7 @@ async def text_reset(ctx):
 @bot.tree.command(name='run', description='starts race.')
 async def slash_run(interaction: discord.Interaction): await run_logic(interaction)
 
-@bot.tree.command(name='yay', description='stops the active race.')
+@bot.tree.command(name='end', description='stops the active race.')
 async def slash_yay(interaction: discord.Interaction): await yay_logic(interaction)
 
 @bot.tree.command(name='pace', description='running races.')
