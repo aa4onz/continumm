@@ -67,7 +67,7 @@ CLASSIC_TIERS = [(min_v, max_v, f"{name}c") for min_v, max_v, name in STANDARD_T
 
 ALL_STANDARD_NAMES = [t[2] for t in STANDARD_TIERS]
 ALL_CLASSIC_NAMES = [t[2] for t in CLASSIC_TIERS]
-
+MEMORY_ALTS = {}  # Local cache tracking to prevent database reading lag
 
 # ==============================================================================
 # PART 3: CLOUD STORAGE DATABASE CONNECTIONS
@@ -107,7 +107,7 @@ def increment_global_score(user_id):
         {"$inc": {"correct_counts": 1}},
         upsert=True
     )
-'''
+
 def increment_global_score(user_id):
     # Check if this user is a registered alt account
     alt_record = db["account_links"].find_one({"_id": str(user_id)})
@@ -118,16 +118,37 @@ def increment_global_score(user_id):
         {"$inc": {"correct_counts": 1}},
         upsert=True
     )
-'''
+
 def log_race_contribution(channel_id, user_id):
     races_collection.update_one(
         {"_id": f"race_{channel_id}"},
         {"$inc": {f"players.{user_id}": 1, "total_counts": 1}}
     )
-'''
+
 def log_race_contribution(channel_id, user_id):
     alt_record = db["account_links"].find_one({"_id": str(user_id)})
     target_id = alt_record["main_id"] if alt_record else str(user_id)
+
+    races_collection.update_one(
+        {"_id": f"race_{channel_id}"},
+        {"$inc": {f"players.{target_id}": 1, "total_counts": 1}}
+    )
+
+'''
+# ==============================================================================
+def increment_global_score(user_id):
+    # Instantly fetches main ID from memory; drops back to original ID if not an alt
+    target_id = MEMORY_ALTS.get(str(user_id), str(user_id))
+
+    leaderboard_collection.update_one(
+        {"_id": target_id},  
+        {"$inc": {"correct_counts": 1}},
+        upsert=True
+    )
+
+def log_race_contribution(channel_id, user_id):
+    # Instantly fetches main ID from memory; drops back to original ID if not an alt
+    target_id = MEMORY_ALTS.get(str(user_id), str(user_id))
 
     races_collection.update_one(
         {"_id": f"race_{channel_id}"},
@@ -154,7 +175,7 @@ async def check_and_announce_winners():
                 winner_score = top_user.get("correct_counts", 0)
                 embed = discord.Embed(
                     title="14days game ended",
-                    description=f"👑**Winner:** <@{winner_id}> counts **{winner_score}**. ty for counting!",
+                    description=f"**Winner:** <@{winner_id}> counts **{winner_score}**. ty for counting!",
                     color=discord.Color.gold()
                 )
                 await channel.send(embed=embed)
@@ -167,14 +188,34 @@ async def check_and_announce_winners():
 # PART 5: CORE CHAT INTERCEPTOR & MEMORY-CACHED PARSER
 # ==============================================================================
 import time
+# ==============================================================================
+# PART 5: EVENT HANDLERS & MESSAGE ENGINE
+# ==============================================================================
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user.name}!')
+    get_tournament_deadline()
+    
+    # --- ADD THIS LOGIC TO PRE-LOAD THE ALTS CACHE ---
+    try:
+        all_links = list(db["account_links"].find())
+        for link in all_links:
+            MEMORY_ALTS[str(link["_id"])] = str(link["main_id"])
+        print(f"Loaded {len(MEMORY_ALTS)} account link structures into memory.")
+    except Exception as e:
+        print(f"Could not load account links: {e}")
+    # -------------------------------------------------
 
+    scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
+    scheduler.start()
+'''
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user.name}! Lag-free tracking matrix initialized.')
     get_tournament_deadline()
     scheduler.add_job(check_and_announce_winners, IntervalTrigger(hours=1))
     scheduler.start()
-
+'''
 @bot.event
 async def on_message(message):
     await bot.process_commands(message)
@@ -262,7 +303,7 @@ async def on_message(message):
     if "You have used 1 guild save!" in message.content:
         try:
             await message.channel.set_permissions(message.guild.default_role, send_messages=False)
-            await message.channel.send("🔒 **Channel Locked! wait... **.")
+            await message.channel.send("**Channel Locked! wait... **.")
         except: pass
         return
 
@@ -354,7 +395,7 @@ async def yay_logic(ctx_or_interaction):
     total_counts = race.get("total_counts", 0)
     final_pace = round(total_counts / duration_hours, 1)
 
-    embed = discord.Embed(title=f"🛑 Race Finished — #{channel.name}", color=discord.Color.red())
+    embed = discord.Embed(title=f"Race Finished — #{channel.name}", color=discord.Color.red())
     embed.description = f"**pace:** `{final_pace} counts/hr`\n**counts:** `{total_counts}`"
     
     players = race.get("players", {})
@@ -504,7 +545,7 @@ async def text_lock(ctx):
         if bot_member:
             await ctx.channel.set_permissions(bot_member, view_channel=True, send_messages=True, add_reactions=True)
         
-    await ctx.send("🔒 **Channel Locked!** wait...")
+    await ctx.send("**Channel Locked!** wait...")
 
 @bot.command(name='unlock')
 @commands.has_permissions(administrator=True)
@@ -542,7 +583,7 @@ async def text_unlock(ctx):
         if bot_member:
             await ctx.channel.set_permissions(bot_member, view_channel=True, send_messages=True, add_reactions=True)
                 
-    await ctx.send("🔓 **Channel Unlocked**")
+    await ctx.send("**Channel Unlocked**")
 
 @bot.command(name='reset')
 @commands.has_permissions(administrator=True)
@@ -551,6 +592,46 @@ async def text_reset(ctx):
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}}, upsert=True)
     await ctx.send("**game reset!**")
+
+# (Keep your existing commands here...)
+
+@bot.command(name='alt')
+@commands.has_permissions(administrator=True)
+async def text_alt(ctx, main_user: discord.Member, alt_user: discord.Member):
+    # 1. Check if the alt has past data saved and transfer it to the main
+    alt_data = leaderboard_collection.find_one({"_id": str(alt_user.id)})
+    previous_counts = alt_data.get("correct_counts", 0) if alt_data else 0
+
+    if previous_counts > 0:
+        leaderboard_collection.update_one(
+            {"_id": str(main_user.id)},
+            {"$inc": {"correct_counts": previous_counts}},
+            upsert=True
+        )
+        leaderboard_collection.delete_one({"_id": str(alt_user.id)})
+
+    # 2. Save the permanent alt-to-main linking data map in MongoDB
+    db["account_links"].update_one(
+        {"_id": str(alt_user.id)},
+        {"$set": {"main_id": str(main_user.id), "linked_at": datetime.now(timezone.utc)}},
+        upsert=True
+    )
+    
+    # 3. Update the local memory cache dynamically
+    MEMORY_ALTS[str(alt_user.id)] = str(main_user.id)
+    
+    # 4. Handle assigning the "alt" server role
+    role = discord.utils.get(ctx.guild.roles, name="alt")
+    if not role:
+        role = await ctx.guild.create_role(name="alt", colour=discord.Colour.dark_grey())
+    
+    await alt_user.add_roles(role)
+    
+    msg = f"alt linked"
+    
+
+
+'''
 # ==============================================================================
 # ADD TO PART 7: LEGACY TEXT COMMANDS ROUTING ENGINE
 # ==============================================================================
@@ -591,7 +672,7 @@ async def slash_alt(interaction: discord.Interaction, main_user: discord.Member,
     await alt_user.add_roles(role)
     await interaction.response.send_message(f"alt linked")
 
-
+'''
 # ==============================================================================
 # PART 8: NATIVE SLASH COMMANDS ARCHITECTURE MAP
 # ==============================================================================
@@ -688,5 +769,47 @@ async def slash_reset(interaction: discord.Interaction):
     new_deadline = datetime.now(timezone.utc) + timedelta(days=14)
     system_collection.update_one({"_id": "global_tournament"}, {"$set": {"end_date": new_deadline}}, upsert=True)
     await interaction.response.send_message("**game reset!** clean clean clean.")
+
+# ==============================================================================
+# PART 8: NATIVE SLASH COMMANDS ARCHITECTURE MAP
+# ==============================================================================
+# (Keep your existing slash commands here...)
+
+@bot.tree.command(name='alt', description='Links an alt account to a main account and merges scores.')
+@app_commands.checks.has_permissions(administrator=True)
+async def slash_alt(interaction: discord.Interaction, main_user: discord.Member, alt_user: discord.Member):
+    # 1. Check if the alt has past data saved and transfer it to the main
+    alt_data = leaderboard_collection.find_one({"_id": str(alt_user.id)})
+    previous_counts = alt_data.get("correct_counts", 0) if alt_data else 0
+
+    if previous_counts > 0:
+        leaderboard_collection.update_one(
+            {"_id": str(main_user.id)},
+            {"$inc": {"correct_counts": previous_counts}},
+            upsert=True
+        )
+        leaderboard_collection.delete_one({"_id": str(alt_user.id)})
+
+    # 2. Save the permanent alt-to-main linking data map in MongoDB
+    db["account_links"].update_one(
+        {"_id": str(alt_user.id)},
+        {"$set": {"main_id": str(main_user.id), "linked_at": datetime.now(timezone.utc)}},
+        upsert=True
+    )
+    
+    # 3. Update the local memory cache dynamically
+    MEMORY_ALTS[str(alt_user.id)] = str(main_user.id)
+    
+    # 4. Handle assigning the "alt" server role
+    role = discord.utils.get(interaction.guild.roles, name="alt")
+    if not role:
+        role = await interaction.guild.create_role(name="alt", colour=discord.Colour.dark_grey())
+        
+    await alt_user.add_roles(role)
+    
+    msg = f"alt linked"
+    
+
+
 
 bot.run(TOKEN)
