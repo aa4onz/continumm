@@ -779,7 +779,7 @@ async def slash_reset(interaction: discord.Interaction):
 # ==============================================================================
 # (Keep your existing slash commands here...)
 
-@bot.tree.command(name='alt', description='Links an alt account to a main account and merges scores.')
+@bot.tree.command(name='alt', description='link alt to main')
 @app_commands.checks.has_permissions(administrator=True)
 async def slash_alt(interaction: discord.Interaction, main_user: discord.Member, alt_user: discord.Member):
     # 1. Check if the alt has past data saved and transfer it to the main
