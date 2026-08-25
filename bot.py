@@ -628,7 +628,10 @@ async def text_alt(ctx, main_user: discord.Member, alt_user: discord.Member):
     await alt_user.add_roles(role)
     
     msg = f"alt linked"
-    await interaction.followup.send(msg)
+    if previous_counts > 0:
+        msg += f""
+        
+    await ctx.send(msg)
     
 
 
@@ -809,7 +812,10 @@ async def slash_alt(interaction: discord.Interaction, main_user: discord.Member,
     await alt_user.add_roles(role)
     
     msg = f"alt linked"
-    await interaction.followup.send(msg)
+    if previous_counts > 0:
+        msg += f""
+        
+    await ctx.send(msg)
     
 
 
