@@ -465,7 +465,7 @@ async def pace_logic(ctx_or_interaction):
         
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
     else: await responder.send_message(embed=embed)
-
+'''
 async def toprun_logic(ctx_or_interaction):
     channel, guild, responder = get_channel_and_guild(ctx_or_interaction)
     if str(channel.id) in COUNTING_CHANNELS: return
@@ -486,7 +486,85 @@ async def toprun_logic(ctx_or_interaction):
 
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
     else: await responder.send_message(embed=embed)
+'''
+# ==============================================================================
+# UPDATED TOPRUNS COMPONENT WITH INTERACTIVE PAGINATION
+# ==============================================================================
+class TopRunsView(discord.ui.View):
+    def __init__(self, data, total_pages):
+        super().__init__(timeout=60.0)  # Component expires after 60 seconds
+        self.data = data
+        self.total_pages = total_pages
+        self.current_page = 1
+        self.update_button_states()
 
+    def update_button_states(self):
+        self.prev_page.disabled = self.current_page == 1
+        self.next_page.disabled = self.current_page == self.total_pages
+
+    def generate_embed(self):
+        embed = discord.Embed(title="Top Fastest Runs", color=discord.Color.purple())
+        
+        if not self.data:
+            embed.description = "no races yet!"
+        else:
+            # Calculate array segment indices for current page (10 per page)
+            start_index = (self.current_page - 1) * 10
+            end_index = start_index + 10
+            page_data = self.data[start_index:end_index]
+            
+            leaderboard_text = ""
+            medals = ["🥇", "🥈", "🥉"]
+            
+            for index, record in enumerate(page_data):
+                actual_rank = start_index + index
+                rank_display = medals[actual_rank] if actual_rank < 3 else f"`#{actual_rank + 1}`"
+                
+                mvp1, mvp2 = record.get("mvp1_id"), record.get("mvp2_id")
+                mvp_text = f"<@{mvp1}>" if mvp1 else "None"
+                if mvp2: 
+                    mvp_text += f" & <@{mvp2}>"
+                    
+                leaderboard_text += f"{rank_display} **{round(record.get('pace', 0.0))} counts/hour** --- {mvp_text}\n"
+                
+            embed.description = leaderboard_text
+
+        embed.set_footer(text=f"Page {self.current_page}/{self.total_pages}")
+        return embed
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.primary)
+    async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page > 1:
+            self.current_page -= 1
+            self.update_button_states()
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.primary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            self.update_button_states()
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+async def toprun_logic(ctx_or_interaction):
+    channel, guild, responder = get_channel_and_guild(ctx_or_interaction)
+    if str(channel.id) in COUNTING_CHANNELS: return
+    
+    # Increase the query limit up to 100 entries
+    records = list(top_races_collection.find().sort("pace", -1).limit(100))
+    
+    total_entries = len(records)
+    total_pages = max(1, (total_entries + 9) // 10)
+    
+    view = TopRunsView(records, total_pages)
+    initial_embed = view.generate_embed()
+    
+    if isinstance(ctx_or_interaction, commands.Context): 
+        await responder.send(embed=initial_embed, view=view)
+    else: 
+        await responder.send_message(embed=initial_embed, view=view)
+
+'''
 async def lb_logic(ctx_or_interaction):
     channel, guild, responder = get_channel_and_guild(ctx_or_interaction)
     if str(channel.id) in COUNTING_CHANNELS: return  
@@ -506,6 +584,85 @@ async def lb_logic(ctx_or_interaction):
     embed.set_footer(text=f"remaining: {max(0, (end_date - datetime.now(timezone.utc)).days)} Days")
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
     else: await responder.send_message(embed=embed)
+'''
+# ==============================================================================
+# UPDATED LEADERBOARD COMPONENT WITH INTERACTIVE PAGINATION
+# ==============================================================================
+class LeaderboardView(discord.ui.View):
+    def __init__(self, data, total_pages, timer):
+        super().__init__(timeout=60.0) # Component expires after 60 seconds of inactivity
+        self.data = data
+        self.total_pages = total_pages
+        self.timer = timer
+        self.current_page = 1
+        self.update_button_states()
+
+    def update_button_states(self):
+        # Disable Left button on the first page
+        self.prev_page.disabled = self.current_page == 1
+        # Disable Right button on the last page
+        self.next_page.disabled = self.current_page == self.total_pages
+
+    def generate_embed(self):
+        embed = discord.Embed(title="server leaderboard(14 days)", color=discord.Color.blue())
+        
+        if not self.data:
+            embed.description = "is empty :("
+        else:
+            # Calculate indices to slice the Top 100 array for the current page (10 per page)
+            start_index = (self.current_page - 1) * 10
+            end_index = start_index + 10
+            page_data = self.data[start_index:end_index]
+            
+            leaderboard_text = ""
+            medals = ["🥇", "🥈", "🥉"]
+            
+            for index, user_data in enumerate(page_data):
+                actual_rank = start_index + index
+                rank_display = medals[actual_rank] if actual_rank < 3 else f"`#{actual_rank + 1}`"
+                leaderboard_text += f"{rank_display} <@{user_data.get('_id')}> — {user_data.get('correct_counts')}\n"
+                
+            embed.description = leaderboard_text
+
+        end_date = self.timer["end_date"].replace(tzinfo=timezone.utc) if self.timer["end_date"].tzinfo is None else self.timer["end_date"]
+        remaining_days = max(0, (end_date - datetime.now(timezone.utc)).days)
+        
+        embed.set_footer(text=f"Page {self.current_page}/{self.total_pages} • remaining: {remaining_days} Days")
+        return embed
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.primary)
+    async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page > 1:
+            self.current_page -= 1
+            self.update_button_states()
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.primary)
+    async def next_page(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_page < self.total_pages:
+            self.current_page += 1
+            self.update_button_states()
+            await interaction.response.edit_message(embed=self.generate_embed(), view=self)
+
+async def lb_logic(ctx_or_interaction):
+    channel, guild, responder = get_channel_and_guild(ctx_or_interaction)
+    if str(channel.id) in COUNTING_CHANNELS: return  
+    
+    # Fetch top 100 entries from the collection
+    top_users = list(leaderboard_collection.find().sort("correct_counts", -1).limit(100))
+    timer = get_tournament_deadline()
+    
+    # Calculate how many pages are required based on entries count (max 10 pages)
+    total_entries = len(top_users)
+    total_pages = max(1, (total_entries + 9) // 10)
+    
+    view = LeaderboardView(top_users, total_pages, timer)
+    initial_embed = view.generate_embed()
+    
+    if isinstance(ctx_or_interaction, commands.Context): 
+        await responder.send(embed=initial_embed, view=view)
+    else: 
+        await responder.send_message(embed=initial_embed, view=view)
 
 
 # ==============================================================================
