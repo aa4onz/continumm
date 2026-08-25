@@ -300,12 +300,18 @@ async def on_message(message):
 
     # === GAME CHANNELS PROGRESSIVE COUNTING PROCESSING (C1 & C2) ===
     if current_channel_str not in COUNTING_CHANNELS: return
-    if "You have used 1 guild save!" in message.content:
-        try:
-            await message.channel.set_permissions(message.guild.default_role, send_messages=False)
-            await message.channel.send("**Channel Locked! wait... **.")
-        except: pass
-        return
+
+    # === AUTOMATED CHANNEL LOCKOUT VIA RECOGNIZED COUNTING BOT ALERTS ===
+# Matches the exact bold markdown format sent by the primary Counting Bot
+
+    if "You have used **1** guild save!" in message.content:
+        if message.author.id == COUNTING_BOT_ID:
+            try:
+                await message.channel.set_permissions(message.guild.default_role, send_messages=False)
+                await message.channel.send("**Channel Locked! wait... **.")
+            except Exception as e:
+                print(f"Failed to apply lockdown permission parameters: {e}")
+            return
 
     if message.author.bot: return
     content = message.content.strip()
