@@ -455,7 +455,7 @@ async def pace_logic(ctx_or_interaction):
 
         field_value = f"• **Current Speed:** `{current_pace} counts/hr`\n• **counts:** `{race.get('total_counts', 0)}`\n• **Top 2 :**\n{mvp_display}"
         channel_obj = bot.get_channel(int(ch_id))
-        embed.add_field(name=f"🏁 Channel: #{channel_obj.name if channel_obj else ch_id}", value=field_value, inline=False)
+        embed.add_field(name=f"Channel: #{channel_obj.name if channel_obj else ch_id}", value=field_value, inline=False)
         
     if isinstance(ctx_or_interaction, commands.Context): await responder.send(embed=embed)
     else: await responder.send_message(embed=embed)
@@ -627,7 +627,7 @@ async def text_alt(ctx, main_user: discord.Member, alt_user: discord.Member):
     
     await alt_user.add_roles(role)
     
-    msg = f"{alt_user.display_name} alt linked to {main_user.display_name}"
+    msg = f"{alt_user.display_name} linked to {main_user.display_name}"
     if previous_counts > 0:
         msg += f""
         
@@ -811,7 +811,7 @@ async def slash_alt(interaction: discord.Interaction, main_user: discord.Member,
         
     await alt_user.add_roles(role)
     
-    msg = f"{alt_user.display_name} alt linked to {main_user.display_name}"
+    msg = f"{alt_user.display_name} linked to {main_user.display_name}"
     if previous_counts > 0:
         msg += f""
         
