@@ -14,27 +14,34 @@ async def ready():
     await bot.tree.sync()
 
 async def message(msg):
-    # 1. Let the system process the prefix command first
-    await bot.process_commands(msg)
-    cid = str(msg.channel.id)
+    # 1. Ignore all bot messages immediately to prevent loops
+    if msg.author.bot: 
+        return
 
-    # 2. FIX: Stop tracking if the message is a text command prefix
-    if msg.content.strip().startswith(tuple(px)): return
+    # 2. Check if the message starts with your prefix
+    if msg.content.strip().startswith(tuple(px)):
+        # Process the command and STOP executing the rest of this function
+        await bot.process_commands(msg)
+        return
+
+    cid = str(msg.channel.id)
 
     if cid == c3 and msg.embeds and msg.author.id in [b1, b2]:
         return await role.check_and_update(msg, msg.author.id)
-    if cid not in ch: return
+    if cid not in ch: 
+        return
 
     if "You have used **1** guild save!" in msg.content and msg.author.id == b1:
         return await msg.channel.set_permissions(msg.guild.default_role, send_messages=False)
-    if msg.author.bot: return
 
     body = msg.content.strip()
-    if not body.isdigit() or str(int(body)) != body: return
+    if not body.isdigit() or str(int(body)) != body: 
+        return
     num = int(body)
 
     st = cache[cid]
-    if st["n"] is None: st["n"], st["u"] = num - 1, None
+    if st["n"] is None: 
+        st["n"], st["u"] = num - 1, None
     if num != st["n"] + 1 or msg.author.id == st["u"]: 
         st["n"], st["u"] = num, msg.author.id
         return
@@ -49,19 +56,6 @@ async def message(msg):
         race_up(cid, msg.author.id)
 
 def register():
+    # Only register each listener exactly once
     bot.add_listener(ready, 'on_ready')
     bot.add_listener(message, 'on_message')
-
-    st["n"], st["u"] = num, msg.author.id
-    score_up(msg.author.id)
-
-    rc = db_rc.find_one({"_id": f"race_{cid}"})
-    if rc:
-        if rc.get("start_time") is None: 
-            db_rc.update_one({"_id": f"race_{cid}"}, {"$set": {"start_time": time.time()}})
-        race_up(cid, msg.author.id)
-
-def register():
-    bot.add_listener(ready, 'on_ready')
-    bot.add_listener(message, 'on_message')
-    
