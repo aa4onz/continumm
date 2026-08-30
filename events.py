@@ -1,6 +1,5 @@
 import time
 from variables import *
-# Added get_main to intercept duplicate tracking issues
 from utils import deadline, score_up, race_up, get_main
 import task, role
 from apscheduler.triggers.interval import IntervalTrigger
@@ -37,7 +36,6 @@ async def message(msg):
         return
     num = int(body)
 
-    # Route ID right here to stop teammates from cheating using their secondary accounts
     active_user = get_main(msg.author.id)
 
     st = cache[cid]
