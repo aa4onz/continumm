@@ -4,6 +4,12 @@ from utils import deadline, score_up, race_up
 import task, role
 from apscheduler.triggers.interval import IntervalTrigger
 
+import time
+from variables import *
+from utils import deadline, score_up, race_up
+import task, role
+from apscheduler.triggers.interval import IntervalTrigger
+
 async def ready():
     print("Bot ready.")
     deadline()
@@ -18,9 +24,9 @@ async def message(msg):
     if msg.author.bot: 
         return
 
-    # 2. Check if the message starts with your prefix
-    if msg.content.strip().startswith(tuple(px)):
-        # Process the command and STOP executing the rest of this function
+    # 2. Check if the message is a valid command prefix
+    ctx = await bot.get_context(msg)
+    if ctx.valid:
         await bot.process_commands(msg)
         return
 
@@ -41,6 +47,26 @@ async def message(msg):
 
     st = cache[cid]
     if st["n"] is None: 
+        st["n"], st["u"] = num - 1, None
+    if num != st["n"] + 1 or msg.author.id == st["u"]: 
+        st["n"], st["u"] = num, msg.author.id
+        return
+
+    st["n"], st["u"] = num, msg.author.id
+    score_up(msg.author.id)
+
+    rc = db_rc.find_one({"_id": f"race_{cid}"})
+    if rc:
+        if rc.get("start_time") is None: 
+            db_rc.update_one({"_id": f"race_{cid}"}, {"$set": {"start_time": time.time()}})
+        race_up(cid, msg.author.id)
+
+def register():
+    # Only register each listener exactly once
+    bot.add_listener(ready, 'on_ready')
+    bot.add_listener(message, 'on_message')
+
+None: 
         st["n"], st["u"] = num - 1, None
     if num != st["n"] + 1 or msg.author.id == st["u"]: 
         st["n"], st["u"] = num, msg.author.id
