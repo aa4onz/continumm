@@ -15,7 +15,7 @@ b2 = 639599059036012605
 c1 = str(os.getenv('c1')).strip()  
 c2 = str(os.getenv('c2')).strip()  
 c3 = str(os.getenv('c3')).strip()  
-ch = [c1, c2]
+chen = [c1, c2]
 
 cache = {c1: {"n": None, "u": None}, c2: {"n": None, "u": None}}
 alts = {}
