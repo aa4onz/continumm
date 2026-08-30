@@ -36,6 +36,8 @@ def create_paginator(v, h, c, is_lb=False):
 
     b1 = d.ui.Button(label="◀", style=d.ButtonStyle.primary, disabled=True)
     b2 = d.ui.Button(label="▶", style=d.ButtonStyle.primary, disabled=(view.pages == 1))
+    b3 = d.ui.Button(emoji="📍", style=d.ButtonStyle.primary)
+    b4 = d.ui.Button(emoji="🔄", style=d.ButtonStyle.primary)
 
     async def prev_click(it):
         if view.p > 1:
@@ -51,9 +53,23 @@ def create_paginator(v, h, c, is_lb=False):
             b2.disabled = (view.p == view.pages)
             await it.response.edit_message(embed=build(), view=view)
 
+    async def pin_click(it):
+        await it.response.send_message("📍 Menu page marked!", ephemeral=True)
+
+    async def reset_click(it):
+        view.p = 1
+        b1.disabled = True
+        b2.disabled = (view.pages == 1)
+        await it.response.edit_message(embed=build(), view=view)
+
     b1.callback = prev_click
     b2.callback = next_click
+    b3.callback = pin_click
+    b4.callback = reset_click
+    
     view.add_item(b1)
     view.add_item(b2)
+    view.add_item(b3)
+    view.add_item(b4)
     view.build_embed = build
     return view
