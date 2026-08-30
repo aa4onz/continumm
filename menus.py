@@ -6,6 +6,13 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
     view.p = 1
     view.pages = max(1, (len(v) + 9) // 10)
 
+    top_run_idx = -1
+    if not is_lb and author_id:
+        for idx, item in enumerate(v):
+            if str(item.get('mvp1_id')) == str(author_id) or str(item.get('mvp2_id')) == str(author_id):
+                top_run_idx = idx 
+                break
+
     def build():
         emb = d.Embed(title=h, color=c)
         if not v:
@@ -19,17 +26,17 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
             idx = ((view.p - 1) * 10) + i
             r = m[idx] if idx < 3 else f"`#{idx + 1}`"
             
-            
-            is_user = str(item.get('_id')) == str(author_id)
-            pin_icon = " 📍" if is_user else ""
-            
             if is_lb:
-                lines.append(f"{r} - 💧 {item.get('correct_counts')} <@{item.get('_id')}>" + pin_icon)
+                is_user = str(item.get('_id')) == str(author_id)
+                pin_icon = " 📍" if is_user else ""
+                lines.append(f"{r} - {item.get('correct_counts')}{pin_icon} <@{item.get('_id')}>")
             else:
                 m1, m2 = item.get("mvp1_id"), item.get("mvp2_id")
+                pin_icon = " 📍" if idx == top_run_idx else ""
+                
                 txt = f"<@{m1}>" if m1 else "None"
                 if m2: txt += f" & <@{m2}>"
-                lines.append(f"{r} **{round(item.get('pace', 0.0))} /hr** --- {txt}" + pin_icon)
+                lines.append(f"{r} **{round(item.get('pace', 0.0))} /hr**{pin_icon} --- {txt}")
                 
         emb.description = "\n".join(lines)
         if is_lb:
@@ -59,20 +66,19 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
             await it.response.edit_message(embed=build(), view=view)
 
     async def pin_click(it):
-        
         user_idx = -1
-        for idx, item in enumerate(v):
-            if str(item.get('_id')) == str(it.user.id):
-                user_idx = idx
-                break
+        if is_lb:
+            for idx, item in enumerate(v):
+                if str(item.get('_id')) == str(it.user.id):
+                    user_idx = idx
+                    break
+        else:
+            user_idx = top_run_idx
         
         if user_idx == -1:
-            return await it.response.send_message("sorry! You aren't ranked on this leaderboard yet!", ephemeral=True)
+            return await it.response.send_message("sorry! you aren't ranked on this leaderboard yet!", ephemeral=True)
         
-        target_page = (user_idx // 10) + 1
-        view.p = target_page
-        
-        
+        view.p = (user_idx // 10) + 1
         b1.disabled = (view.p == 1)
         b2.disabled = (view.p == view.pages)
         await it.response.edit_message(embed=build(), view=view)
