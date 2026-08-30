@@ -20,23 +20,29 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
             return emb
         
         chunk = v[(view.p - 1) * 10 : view.p * 10]
-        lines, m = [], ["🥇", "🥈", "🥉"]
+        lines = []
         
         for i, item in enumerate(chunk):
             idx = ((view.p - 1) * 10) + i
-            r = m[idx] if idx < 3 else f"`#{idx + 1}`"
+            r = f"#{idx + 1}"
             
             if is_lb:
-                is_user = str(item.get('_id')) == str(author_id)
+                # Format: #[Rank] <@[User ID]>, **[Score]** [Pin]
+                score = item.get('correct_counts', 0)
+                u_id = item.get('_id')
+                is_user = str(u_id) == str(author_id)
                 pin_icon = " 📍" if is_user else ""
-                lines.append(f"{r} - {item.get('correct_counts')}{pin_icon} <@{item.get('_id')}>")
+                
+                lines.append(f"{r} <@{u_id}>, **{score:,}**{pin_icon}")
             else:
+                # Format: #[Rank] **[Pace]**, <@[MVP1]> & <@[MVP2]> [Pin]
                 m1, m2 = item.get("mvp1_id"), item.get("mvp2_id")
                 pin_icon = " 📍" if idx == top_run_idx else ""
                 
                 txt = f"<@{m1}>" if m1 else "None"
                 if m2: txt += f" & <@{m2}>"
-                lines.append(f"{r} **{round(item.get('pace', 0.0))} /hr**{pin_icon} --- {txt}")
+                
+                lines.append(f"{r} **{round(item.get('pace', 0.0)):,}**, {txt}{pin_icon}")
                 
         emb.description = "\n".join(lines)
         if is_lb:
