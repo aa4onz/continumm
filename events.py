@@ -14,8 +14,12 @@ async def ready():
     await bot.tree.sync()
 
 async def message(msg):
+    # 1. Let the system process the prefix command first
     await bot.process_commands(msg)
     cid = str(msg.channel.id)
+
+    # 2. FIX: Stop tracking if the message is a text command prefix
+    if msg.content.strip().startswith(tuple(px)): return
 
     if cid == c3 and msg.embeds and msg.author.id in [b1, b2]:
         return await role.check_and_update(msg, msg.author.id)
@@ -23,7 +27,7 @@ async def message(msg):
 
     if "You have used **1** guild save!" in msg.content and msg.author.id == b1:
         return await msg.channel.set_permissions(msg.guild.default_role, send_messages=False)
-    if msg.author.bot or msg.content.strip().startswith('r!'): return
+    if msg.author.bot: return
 
     body = msg.content.strip()
     if not body.isdigit() or str(int(body)) != body: return
@@ -34,6 +38,19 @@ async def message(msg):
     if num != st["n"] + 1 or msg.author.id == st["u"]: 
         st["n"], st["u"] = num, msg.author.id
         return
+
+    st["n"], st["u"] = num, msg.author.id
+    score_up(msg.author.id)
+
+    rc = db_rc.find_one({"_id": f"race_{cid}"})
+    if rc:
+        if rc.get("start_time") is None: 
+            db_rc.update_one({"_id": f"race_{cid}"}, {"$set": {"start_time": time.time()}})
+        race_up(cid, msg.author.id)
+
+def register():
+    bot.add_listener(ready, 'on_ready')
+    bot.add_listener(message, 'on_message')
 
     st["n"], st["u"] = num, msg.author.id
     score_up(msg.author.id)
