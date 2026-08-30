@@ -1,6 +1,7 @@
 import time
 from variables import *
-from utils import deadline, score_up, race_up
+# Added get_main to intercept duplicate tracking issues
+from utils import deadline, score_up, race_up, get_main
 import task, role
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -14,12 +15,9 @@ async def ready():
     await bot.tree.sync()
 
 async def message(msg):
-    # 1. Ignore all bot messages immediately to prevent loops
     if msg.author.bot: 
         return
 
-    # 2. Check if this is a registered text command. If it is, exit!
-    # (discord.py natively executes it in the background, so we just return here)
     ctx = await bot.get_context(msg)
     if ctx.valid:
         return
@@ -39,14 +37,17 @@ async def message(msg):
         return
     num = int(body)
 
+    # Route ID right here to stop teammates from cheating using their secondary accounts
+    active_user = get_main(msg.author.id)
+
     st = cache[cid]
     if st["n"] is None: 
         st["n"], st["u"] = num - 1, None
-    if num != st["n"] + 1 or msg.author.id == st["u"]: 
-        st["n"], st["u"] = num, msg.author.id
+    if num != st["n"] + 1 or active_user == st["u"]: 
+        st["n"], st["u"] = num, active_user
         return
 
-    st["n"], st["u"] = num, msg.author.id
+    st["n"], st["u"] = num, active_user
     score_up(msg.author.id)
 
     rc = db_rc.find_one({"_id": f"race_{cid}"})
