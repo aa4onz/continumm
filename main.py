@@ -6,5 +6,4 @@ slash.register()
 events.register()
 
 if __name__ == '__main__':
-    bot.run(tok
-           )
+    bot.run(tok)
