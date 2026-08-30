@@ -56,5 +56,4 @@ def create_paginator(v, h, c, is_lb=False):
     view.add_item(b1)
     view.add_item(b2)
     view.build_embed = build
-    return
-  view
+    return view
