@@ -1,7 +1,7 @@
 from variables import *
 from utils import deadline
 
-def create_paginator(v, h, c, is_lb=False):
+def create_paginator(v, h, c, is_lb=False, author_id=None):
     view = d.ui.View(timeout=60.0)
     view.p = 1
     view.pages = max(1, (len(v) + 9) // 10)
@@ -18,13 +18,18 @@ def create_paginator(v, h, c, is_lb=False):
         for i, item in enumerate(chunk):
             idx = ((view.p - 1) * 10) + i
             r = m[idx] if idx < 3 else f"`#{idx + 1}`"
+            
+            
+            is_user = str(item.get('_id')) == str(author_id)
+            pin_icon = " 📍" if is_user else ""
+            
             if is_lb:
-                lines.append(f"{r} <@{item.get('_id')}> — {item.get('correct_counts')}")
+                lines.append(f"{r} - 💧 {item.get('correct_counts')} <@{item.get('_id')}>" + pin_icon)
             else:
                 m1, m2 = item.get("mvp1_id"), item.get("mvp2_id")
                 txt = f"<@{m1}>" if m1 else "None"
                 if m2: txt += f" & <@{m2}>"
-                lines.append(f"{r} **{round(item.get('pace', 0.0))} /hr** --- {txt}")
+                lines.append(f"{r} **{round(item.get('pace', 0.0))} /hr** --- {txt}" + pin_icon)
                 
         emb.description = "\n".join(lines)
         if is_lb:
@@ -54,7 +59,23 @@ def create_paginator(v, h, c, is_lb=False):
             await it.response.edit_message(embed=build(), view=view)
 
     async def pin_click(it):
-        await it.response.send_message("📍 Menu page marked!", ephemeral=True)
+        
+        user_idx = -1
+        for idx, item in enumerate(v):
+            if str(item.get('_id')) == str(it.user.id):
+                user_idx = idx
+                break
+        
+        if user_idx == -1:
+            return await it.response.send_message("sorry! You aren't ranked on this leaderboard yet!", ephemeral=True)
+        
+        target_page = (user_idx // 10) + 1
+        view.p = target_page
+        
+        
+        b1.disabled = (view.p == 1)
+        b2.disabled = (view.p == view.pages)
+        await it.response.edit_message(embed=build(), view=view)
 
     async def reset_click(it):
         view.p = 1
