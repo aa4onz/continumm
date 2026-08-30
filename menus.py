@@ -27,22 +27,33 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
             r = f"#{idx + 1}"
             
             if is_lb:
-                # Format: #[Rank] <@[User ID]>, **[Score]** [Pin]
+                # --- lb.py: [Rank] [Username], **[Score]** [Pin] ---
                 score = item.get('correct_counts', 0)
                 u_id = item.get('_id')
+                
+                u_obj = bot.get_user(int(u_id))
+                u_name = u_obj.name if u_obj else f"User-{u_id}"
+                
                 is_user = str(u_id) == str(author_id)
                 pin_icon = " 📍" if is_user else ""
                 
-                lines.append(f"{r} <@{u_id}>, **{score:,}**{pin_icon}")
+                lines.append(f"{r} {u_name}, **{score:,}**{pin_icon}")
             else:
-                # Format: #[Rank] **[Pace]**, <@[MVP1]> & <@[MVP2]> [Pin]
+                # --- topruns.py: [Rank] [Teammate Names], **[Pace]** [Pin] ---
                 m1, m2 = item.get("mvp1_id"), item.get("mvp2_id")
                 pin_icon = " 📍" if idx == top_run_idx else ""
                 
-                txt = f"<@{m1}>" if m1 else "None"
-                if m2: txt += f" & <@{m2}>"
+                obj1 = bot.get_user(int(m1)) if m1 else None
+                obj2 = bot.get_user(int(m2)) if m2 else None
                 
-                lines.append(f"{r} **{round(item.get('pace', 0.0)):,}**, {txt}{pin_icon}")
+                name1 = obj1.name if obj1 else f"User-{m1}" if m1 else "None"
+                name2 = obj2.name if obj2 else f"User-{m2}" if m2 else ""
+                
+                txt = f"{name1} & {name2}" if name2 else name1
+                pace_val = round(item.get('pace', 0.0))
+                
+                # Swapped order: Username comes first, comma space, bolded pace counter comes last
+                lines.append(f"{r} {txt}, **{pace_val:,}**{pin_icon}")
                 
         emb.description = "\n".join(lines)
         if is_lb:
