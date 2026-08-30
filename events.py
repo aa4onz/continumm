@@ -18,10 +18,10 @@ async def message(msg):
     if msg.author.bot: 
         return
 
-    # 2. Check if the message matches a command prefix instead of manual startswith string matching
+    # 2. Check if this is a registered text command. If it is, exit!
+    # (discord.py natively executes it in the background, so we just return here)
     ctx = await bot.get_context(msg)
     if ctx.valid:
-        await bot.process_commands(msg)
         return
 
     cid = str(msg.channel.id)
