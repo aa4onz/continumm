@@ -1,6 +1,5 @@
 from variables import *
 from utils import deadline
-import ansi
 
 def create_paginator(v, h, c, is_lb=False, author_id=None):
     view = d.ui.View(timeout=60.0)
@@ -27,33 +26,17 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
             idx = ((view.p - 1) * 10) + i
             r = m[idx] if idx < 3 else f"`#{idx + 1}`"
             
-            clr = ansi.run_color(idx + 1)
-            
             if is_lb:
-                score = item.get('correct_counts', 0)
-                u_id = item.get('_id')
-                u_obj = bot.get_user(int(u_id))
-                u_name = u_obj.name if u_obj else f"User-{u_id}"
-                
-                is_user = str(u_id) == str(author_id)
+                is_user = str(item.get('_id')) == str(author_id)
                 pin_icon = " 📍" if is_user else ""
-                
-                txt_row = f"{u_name} - {score}"
-                lines.append(f"{r} ```ansi\n{ansi.paint(txt_row, clr)}``` {pin_icon}")
+                lines.append(f"{r} - {item.get('correct_counts')}{pin_icon} <@{item.get('_id')}>")
             else:
                 m1, m2 = item.get("mvp1_id"), item.get("mvp2_id")
                 pin_icon = " 📍" if idx == top_run_idx else ""
                 
-                obj1 = bot.get_user(int(m1)) if m1 else None
-                obj2 = bot.get_user(int(m2)) if m2 else None
-                
-                name1 = obj1.name if obj1 else f"User-{m1}" if m1 else "None"
-                name2 = obj2.name if obj2 else f"User-{m2}" if m2 else ""
-                
-                txt = f"{name1} & {name2}" if name2 else name1
-                
-                txt_row = f"{round(item.get('pace', 0.0))}/hr - {txt}"
-                lines.append(f"{r} ```ansi\n{ansi.paint(txt_row, clr)}``` {pin_icon}")
+                txt = f"<@{m1}>" if m1 else "None"
+                if m2: txt += f" & <@{m2}>"
+                lines.append(f"{r} **{round(item.get('pace', 0.0))} /hr**{pin_icon} --- {txt}")
                 
         emb.description = "\n".join(lines)
         if is_lb:
