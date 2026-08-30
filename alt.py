@@ -4,15 +4,15 @@ from utils import ctx_parse
 async def exec(tgt, main, alt_user):
     _, guild, resp = ctx_parse(tgt)
     
-    # 1. Clean main if passed as a string/ping, or grab the ID if passed as a Member object
+    # 1. Clean main of ALL Discord mention symbols (&, !, <, >, @)
     if isinstance(main, str):
-        main_id = main.replace("<@", "").replace(">", "").replace("!", "").strip()
+        main_id = main.replace("<", "").replace(">", "").replace("@", "").replace("!", "").replace("&", "").strip()
     else:
         main_id = str(main.id)
         
-    # 2. Clean alt_user if passed as a string/ping, or grab the ID if passed as a Member object
+    # 2. Clean alt_user of ALL Discord mention symbols (&, !, <, >, @)
     if isinstance(alt_user, str):
-        alt_id = alt_user.replace("<@", "").replace(">", "").replace("!", "").strip()
+        alt_id = alt_user.replace("<", "").replace(">", "").replace("@", "").replace("!", "").replace("&", "").strip()
     else:
         alt_id = str(alt_user.id)
 
