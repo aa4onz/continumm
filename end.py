@@ -12,9 +12,20 @@ async def exec(tgt):
     cnt = rc.get("total_counts", 0)
     pace = round(cnt / hrs, 1)
     emb = d.Embed(title=f"Race Finished — #{chan.name}", color=d.Color.red(), description=f"**pace:** `{pace} /hr`\n**counts:** `{cnt}`")
-    mvps = [uid for uid, _ in sorted(rc.get("players", {}).items(), key=lambda x: x, reverse=True)[:2]]
+    
+    # Sort by their actual contribution counts value instead of using the raw tuple object context
+    sorted_players = sorted(rc.get("players", {}).items(), key=lambda x: x[1], reverse=True)
+    mvps = [uid for uid, _ in sorted_players[:2]]
+    
     if cnt > 0:
-        db_top.insert_one({"pace": pace, "total_counts": cnt, "channel_name": chan.name, "mvp1_id": (mvps if len(mvps)>0 else None), "mvp2_id": (mvps if len(mvps)>1 else None), "timestamp": dt.now(tz.utc)})
+        db_top.insert_one({
+            "pace": pace, 
+            "total_counts": cnt, 
+            "channel_name": chan.name, 
+            "mvp1_id": str(mvps[0]) if len(mvps) > 0 else None, 
+            "mvp2_id": str(mvps[1]) if len(mvps) > 1 else None, 
+            "timestamp": dt.now(tz.utc)
+        })
     db_rc.delete_one({"_id": f"race_{cid}"})
     cache[cid] = {"n": None, "u": None}
     await (resp.send(embed=emb) if isinstance(tgt, c.Context) else resp.send_message(embed=emb))
