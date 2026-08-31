@@ -9,7 +9,13 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
     top_run_idx = -1
     if not is_lb and author_id:
         for idx, item in enumerate(v):
-            if str(item.get('mvp1_id')) == str(author_id) or str(item.get('mvp2_id')) == str(author_id):
+            # Flatten lists safely if old entries contain arrays inside MongoDB
+            m1_raw = item.get('mvp1_id')
+            m2_raw = item.get('mvp2_id')
+            m1_id = m1_raw[0] if isinstance(m1_raw, list) and len(m1_raw) > 0 else m1_raw
+            m2_id = m2_raw[0] if isinstance(m2_raw, list) and len(m2_raw) > 0 else m2_raw
+            
+            if str(m1_id) == str(author_id) or str(m2_id) == str(author_id):
                 top_run_idx = idx 
                 break
 
@@ -27,7 +33,6 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
             r = f"#{idx + 1}"
             
             if is_lb:
-                # --- lb.py: [Rank] [Username], **[Score]** [Pin] ---
                 score = item.get('correct_counts', 0)
                 u_id = item.get('_id')
                 
@@ -39,8 +44,13 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                 
                 lines.append(f"{r} {u_name}, **{score:,}**{pin_icon}")
             else:
-                # --- topruns.py: [Rank] [Teammate Names], **[Pace]** [Pin] ---
-                m1, m2 = item.get("mvp1_id"), item.get("mvp2_id")
+                m1_raw = item.get("mvp1_id")
+                m2_raw = item.get("mvp2_id")
+                
+                # Flatten arrays safely to prevent int() conversion failures from list elements
+                m1 = m1_raw[0] if isinstance(m1_raw, list) and len(m1_raw) > 0 else m1_raw
+                m2 = m2_raw[0] if isinstance(m2_raw, list) and len(m2_raw) > 0 else m2_raw
+                
                 pin_icon = " 📍" if idx == top_run_idx else ""
                 
                 obj1 = bot.get_user(int(m1)) if m1 else None
@@ -52,7 +62,6 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                 txt = f"{name1} & {name2}" if name2 else name1
                 pace_val = round(item.get('pace', 0.0))
                 
-                # Swapped order: Username comes first, comma space, bolded pace counter comes last
                 lines.append(f"{r} {txt}, **{pace_val:,}**{pin_icon}")
                 
         emb.description = "\n".join(lines)
