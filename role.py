@@ -9,7 +9,7 @@ async def check_and_update(msg, b_id):
             print("[DEBUG] Exiting: No embeds found in message.")
             return
             
-        emb = msg.embeds[0] if isinstance(msg.embeds, list) else msg.embeds
+        emb = msg.embeds if isinstance(msg.embeds, list) else msg.embeds
         txt = emb.title or (emb.author.name if emb.author else "")
         print(f"[DEBUG] Found embed content text header: '{txt}'")
         
@@ -54,11 +54,11 @@ async def check_and_update(msg, b_id):
         print(f"[DEBUG] Matching milestone role target discovered: '{tgt}'")
                 
         if tgt:
-            # Fetch or create the role blueprint
-            r = discord.utils.get(msg.guild.roles, name=tgt)
+            # FIX: Swapped out 'discord' with your alias variable wrapper 'd'
+            r = d.utils.get(msg.guild.roles, name=tgt)
             if not r:
                 print(f"[DEBUG] Role '{tgt}' does not exist. Attempting to create it...")
-                r = await msg.guild.create_role(name=tgt, colour=(discord.Colour.purple() if b_id == b1 else discord.Colour.blue()))
+                r = await msg.guild.create_role(name=tgt, colour=(d.Colour.purple() if b_id == b1 else d.Colour.blue()))
                 print(f"[DEBUG] Successfully created role: '{tgt}'")
             
             # Update permissions down to 10k benchmarks
