@@ -6,20 +6,27 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
     view.p = 1
     view.pages = max(1, (len(v) + 9) // 10)
 
+    # Dynamic check utility to look for your custom names if a user left the server
     def get_display_name(uid_str):
         if not uid_str: 
             return "None"
+        try:    
+            uid_int = int(str(uid_str).replace("[","").replace("]","").replace("'","").strip())
+            u_obj = bot.get_user(uid_int)
             
-        uid_int = int(str(uid_str).replace("[","").replace("]","").replace("'","").strip())
-        u_obj = bot.get_user(uid_int)
-        
-        if u_obj: 
-            return u_obj.name
-            
-        db_row = db_cn.find_one({"_id": str(uid_int)})
-        if db_row: 
-            return db_row.get("name")
-        return f"User-{uid_int}"
+            # 1. If user is still in the server cache, display their real active name
+            if u_obj: 
+                return u_obj.name
+                
+            # 2. Safety Net Fallback: Check MongoDB for a manual override name
+            db_row = db_cn.find_one({"_id": str(uid_int)})
+            if db_row: 
+                return db_row.get("name")
+                
+            # 3. Last resort fallback string if no custom name was configured
+            return f"User-{uid_int}"
+        except:
+            return "Left User"
 
     top_run_idx = -1
     if not is_lb and author_id:
@@ -28,8 +35,8 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
             m2_raw = item.get('mvp2_id')
             
             if isinstance(m1_raw, list):
-                m1_id = m1_raw if len(m1_raw) > 0 else None
-                m2_id = m1_raw if len(m1_raw) > 1 else m2_raw
+                m1_id = m1_raw[0] if len(m1_raw) > 0 else None
+                m2_id = m1_raw[1] if len(m1_raw) > 1 else m2_raw
             else:
                 m1_id = m1_raw
                 m2_id = m2_raw if isinstance(m2_raw, list) and len(m2_raw) > 0 else m2_raw
@@ -65,8 +72,8 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                 m2_raw = item.get("mvp2_id")
                 
                 if isinstance(m1_raw, list):
-                    m1 = str(m1_raw) if len(m1_raw) > 0 else None
-                    m2 = str(m1_raw) if len(m1_raw) > 1 else None
+                    m1 = str(m1_raw[0]) if len(m1_raw) > 0 else None
+                    m2 = str(m1_raw[1]) if len(m1_raw) > 1 else None
                 else:
                     m1 = str(m1_raw) if m1_raw else None
                     m2 = str(m2_raw) if isinstance(m2_raw, list) and len(m2_raw) > 0 else str(m2_raw) if m2_raw else None
@@ -83,14 +90,16 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                     
                 pace_val = round(item.get('pace', 0.0))
                 db_time = item.get("timestamp")
-                time_str = f" (<t:{int(db_time.replace(tzinfo=timezone.utc).timestamp())}:R>)" if db_time else ""
+                
+                # FIX: Swapped out 'timezone' with your project's short alias 'tz'
+                time_str = f" (<t:{int(db_time.replace(tzinfo=tz.utc).timestamp())}:R>)" if db_time else ""
                 
                 lines.append(f"{r} {txt}, **{pace_val:,}**{time_str}{pin_icon}")
                 
         emb.description = "\n".join(lines)
         if is_lb:
-            ed = deadline()["end_date"].replace(tzinfo=timezone.utc) if deadline()["end_date"].tzinfo is None else deadline()["end_date"]
-            emb.set_footer(text=f"Page {view.p}/{view.pages} • Rem: {max(0, (ed - datetime.now(timezone.utc)).days)}d")
+            ed = deadline()["end_date"].replace(tzinfo=tz.utc) if deadline()["end_date"].tzinfo is None else deadline()["end_date"]
+            emb.set_footer(text=f"Page {view.p}/{view.pages} • Rem: {max(0, (ed - dt.now(tz.utc)).days)}d")
         else:
             emb.set_footer(text=f"Page {view.p}/{view.pages}")
         return emb
