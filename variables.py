@@ -27,6 +27,8 @@ db_sys = db["system_state"]
 db_rc  = db["active_races"]
 db_top = db["top_races"]
 db_alt = db["account_links"]
+db_cn = db["custom_names"] 
+
 
 t = [
     (3000000, 3999999, "3,000,000"), (2000000, 2999999, "2,000,000"),
