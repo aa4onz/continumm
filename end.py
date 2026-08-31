@@ -12,8 +12,8 @@ async def exec(tgt):
     cnt = rc.get("total_counts", 0)
     pace = round(cnt / hrs, 1)
     
-    # Formats a clean bracketed Unix timestamp string (e.g., (12:34 PM))
-    time_bracket = f"({int(time.time())}:t)"
+    # FIX: Added the missing client angle bracket wrappers around the finishing time log
+    time_bracket = f"(<t:{int(time.time())}:t>)"
     emb = d.Embed(title=f"Race Finished — #{chan.name} {time_bracket}", color=d.Color.red(), description=f"**pace:** `{pace} /hr`\n**counts:** `{cnt}`")
     
     sorted_players = sorted(rc.get("players", {}).items(), key=lambda x: x[1], reverse=True)
