@@ -11,9 +11,11 @@ async def exec(tgt):
     hrs = max((time.time() - float(t0)) / 3600.0, 0.0001) if t0 else 0.0001
     cnt = rc.get("total_counts", 0)
     pace = round(cnt / hrs, 1)
-    emb = d.Embed(title=f"Race Finished — #{chan.name}", color=d.Color.red(), description=f"**pace:** `{pace} /hr`\n**counts:** `{cnt}`")
     
-    # Sort by their actual contribution counts value instead of using the raw tuple object context
+    # Formats a clean bracketed Unix timestamp string (e.g., (12:34 PM))
+    time_bracket = f"({int(time.time())}:t)"
+    emb = d.Embed(title=f"Race Finished — #{chan.name} {time_bracket}", color=d.Color.red(), description=f"**pace:** `{pace} /hr`\n**counts:** `{cnt}`")
+    
     sorted_players = sorted(rc.get("players", {}).items(), key=lambda x: x[1], reverse=True)
     mvps = [uid for uid, _ in sorted_players[:2]]
     
