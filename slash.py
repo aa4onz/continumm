@@ -1,5 +1,5 @@
 from variables import *
-import run, end, pace, topruns, lb, lock, alt, reset
+import run, end, pace, topruns, lb, lock, alt, reset, cn
 
 def register():
     @bot.tree.command(name='run')
@@ -28,4 +28,8 @@ def register():
     
     @bot.tree.command(name='alt')
     async def s_alt(i, m: d.Member, a: d.Member): await alt.exec(i, m, a)
+    
+    @bot.tree.command(name='cn', description='Set a fallback username for a member who left')
+    async def s_cn(i, user_id: str, custom_name: str): await cn.exec(i, user_id, custom_name=custom_name)
+
       
