@@ -1,5 +1,5 @@
 from variables import *
-import run, end, pace, topruns, lb, lock, alt, reset
+import run, end, pace, topruns, lb, lock, alt, reset, cn
 
 def register():
     bot.add_command(c.Command(run.exec, name='run'))
@@ -15,3 +15,4 @@ def register():
         await lock.exec(ctx, False)
     bot.add_command(c.Command(cmd_lock, name='lock'))
     bot.add_command(c.Command(cmd_unlock, name='unlock'))
+    bot.add_command(c.Command(cn.exec, name='cn'))
