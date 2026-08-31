@@ -9,7 +9,8 @@ async def check_and_update(msg, b_id):
             print("[DEBUG] Exiting: No embeds found in message.")
             return
             
-        emb = msg.embeds if isinstance(msg.embeds, list) else msg.embeds
+        # FIX: Extract the first scalar embed out of the list container correctly
+        emb = msg.embeds[0] if isinstance(msg.embeds, list) else msg.embeds
         txt = emb.title or (emb.author.name if emb.author else "")
         print(f"[DEBUG] Found embed content text header: '{txt}'")
         
@@ -54,7 +55,6 @@ async def check_and_update(msg, b_id):
         print(f"[DEBUG] Matching milestone role target discovered: '{tgt}'")
                 
         if tgt:
-            # FIX: Swapped out 'discord' with your alias variable wrapper 'd'
             r = d.utils.get(msg.guild.roles, name=tgt)
             if not r:
                 print(f"[DEBUG] Role '{tgt}' does not exist. Attempting to create it...")
