@@ -56,7 +56,7 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                     m2 = m1_raw[1] if len(m1_raw) > 1 else None
                 else:
                     m1 = m1_raw
-                    m2 = m2_raw if isinstance(m2_raw, list) and len(m2_raw) > 1 else m2_raw if isinstance(m2_raw, list) and len(m2_raw) > 0 else m2_raw
+                    m2 = m2_raw if isinstance(m2_raw, list) and len(m2_raw) > 0 else m2_raw
                 
                 pin_icon = " 📍" if idx == top_run_idx else ""
                 
@@ -73,9 +73,9 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                     
                 pace_val = round(item.get('pace', 0.0))
                 
-                # Appends bracketed relative timestamp to lines (e.g., (2 hours ago))
+                # FIX: Added the missing <t: and > arrow syntax wraps for native client processing
                 db_time = item.get("timestamp")
-                time_str = f" ({int(db_time.replace(tzinfo=tz.utc).timestamp())}:R)" if db_time else ""
+                time_str = f" (<t:{int(db_time.replace(tzinfo=tz.utc).timestamp())}:R>)" if db_time else ""
                 
                 lines.append(f"{r} {txt}, **{pace_val:,}**{time_str}{pin_icon}")
                 
