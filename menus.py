@@ -9,11 +9,16 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
     top_run_idx = -1
     if not is_lb and author_id:
         for idx, item in enumerate(v):
-            # Flatten lists safely if old entries contain arrays inside MongoDB
             m1_raw = item.get('mvp1_id')
             m2_raw = item.get('mvp2_id')
-            m1_id = m1_raw[0] if isinstance(m1_raw, list) and len(m1_raw) > 0 else m1_raw
-            m2_id = m2_raw[0] if isinstance(m2_raw, list) and len(m2_raw) > 0 else m2_raw
+            
+            # FIX: If it is a duplicated list array, extract index 0 and index 1 separately
+            if isinstance(m1_raw, list):
+                m1_id = m1_raw[0] if len(m1_raw) > 0 else None
+                m2_id = m1_raw[1] if len(m1_raw) > 1 else m2_raw
+            else:
+                m1_id = m1_raw
+                m2_id = m2_raw[0] if isinstance(m2_raw, list) and len(m2_raw) > 0 else m2_raw
             
             if str(m1_id) == str(author_id) or str(m2_id) == str(author_id):
                 top_run_idx = idx 
@@ -47,9 +52,13 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                 m1_raw = item.get("mvp1_id")
                 m2_raw = item.get("mvp2_id")
                 
-                # Flatten arrays safely to prevent int() conversion failures from list elements
-                m1 = m1_raw[0] if isinstance(m1_raw, list) and len(m1_raw) > 0 else m1_raw
-                m2 = m2_raw[0] if isinstance(m2_raw, list) and len(m2_raw) > 0 else m2_raw
+                # FIX: Cleanly unpack array entries by independent index positions
+                if isinstance(m1_raw, list):
+                    m1 = m1_raw[0] if len(m1_raw) > 0 else None
+                    m2 = m1_raw[1] if len(m1_raw) > 1 else None
+                else:
+                    m1 = m1_raw
+                    m2 = m2_raw[1] if isinstance(m2_raw, list) and len(m2_raw) > 1 else m2_raw[0] if isinstance(m2_raw, list) and len(m2_raw) > 0 else m2_raw
                 
                 pin_icon = " 📍" if idx == top_run_idx else ""
                 
@@ -59,9 +68,13 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                 name1 = obj1.name if obj1 else f"User-{m1}" if m1 else "None"
                 name2 = obj2.name if obj2 else f"User-{m2}" if m2 else ""
                 
-                txt = f"{name1} & {name2}" if name2 else name1
+                # Strip out duplicate text strings if they point to the exact same user
+                if name1 == name2 or not name2 or name2 == "None":
+                    txt = name1
+                else:
+                    txt = f"{name1} & {name2}"
+                    
                 pace_val = round(item.get('pace', 0.0))
-                
                 lines.append(f"{r} {txt}, **{pace_val:,}**{pin_icon}")
                 
         emb.description = "\n".join(lines)
