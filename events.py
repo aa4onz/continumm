@@ -14,6 +14,10 @@ async def ready():
     await bot.tree.sync()
 
 async def message(msg):
+    cid = str(msg.channel.id)
+
+    if cid == c3 and msg.embeds and msg.author.id in [b1, b2]:
+        return await role.check_and_update(msg, msg.author.id)
     if msg.author.bot: 
         return
 
@@ -21,10 +25,7 @@ async def message(msg):
     if ctx.valid:
         return
 
-    cid = str(msg.channel.id)
-
-    if cid == c3 and msg.embeds and msg.author.id in [b1, b2]:
-        return await role.check_and_update(msg, msg.author.id)
+    
     if cid not in ch: 
         return
 
