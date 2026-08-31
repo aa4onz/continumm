@@ -2,6 +2,8 @@ import time
 from variables import *
 from utils import deadline, score_up, race_up, get_main
 import task, role
+from discord.ext import commands 
+from discord import app_commands  
 from apscheduler.triggers.interval import IntervalTrigger
 
 async def ready():
@@ -12,6 +14,24 @@ async def ready():
     cron.add_job(task.check_winners, IntervalTrigger(hours=1))
     cron.start()
     await bot.tree.sync()
+
+async def command_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("only server administrators can use this command.", delete_after=5)
+        return
+    if isinstance(error, commands.CommandNotFound):
+        return
+    print(f"[ERROR] Prefix exception: {error}")
+
+async def app_error(interaction, error):
+    if isinstance(error, app_commands.MissingPermissions):
+        msg = "Only server administrators can use this command."
+        if interaction.response.is_done():
+            await interaction.followup.send(msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
+        return
+    print(f"[ERROR] Slash exception: {error}")
 
 async def message(msg):
     cid = str(msg.channel.id)
@@ -25,7 +45,6 @@ async def message(msg):
     if ctx.valid:
         return
 
-    
     if cid not in ch: 
         return
 
@@ -58,3 +77,5 @@ async def message(msg):
 def register():
     bot.add_listener(ready, 'on_ready')
     bot.add_listener(message, 'on_message')
+    bot.add_listener(command_error, 'on_command_error')
+    bot.tree.error(app_error)
