@@ -108,9 +108,9 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
             description=f"u should spend **{total_coins_needed:,} coins** on **{stat_emoji}** next.",
             color=color
         )
-        lv = level
+        lv = "level"
         if levels_to_buy >1:
-            lv = levels
+            lv = "levels"
         report.add_field(
             name="INVESTMENT PLAN", 
             value=f"this amount will upgrade your **{first_target}** by **{levels_to_buy} {lv}** before it's time to swap.", 
