@@ -18,38 +18,39 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
     content_text = "\n".join(text_pieces)
 
     try:
-        # 2. High-compatibility RegEx pattern configurations
-        # Finds integers after terms like "Efficiency Lvl 77" or "Lvl: 77"
+        # 2. Extract Levels using text markers
         e_lvl_match = re.search(r"Efficiency\s*(?:Lvl|Level)?[:\s]*(\d+)", content_text, re.IGNORECASE)
         q_lvl_match = re.search(r"Quality\s*(?:Lvl|Level)?[:\s]*(\d+)", content_text, re.IGNORECASE)
 
-        # Finds percentages like "20.46%" or "currently 20.46"
-        e_current_match = re.search(r"(?:currently\s*)?([\d.]+)%\s*(?:chance|for|to)", content_text, re.IGNORECASE)
-        q_current_match = re.search(r"(?:reduced\s*by\s*|reduction\s*)?([\d.]+)%", content_text, re.IGNORECASE)
+        # 3. Extract Percentages with specific Bold Markdown handling
+        # Matches: "currently **24.94%** chance" or "currently **24.94%**"
+        e_current_match = re.search(r"currently\s+\*\*([\d.]+)\s*%\*\*", content_text, re.IGNORECASE)
+        
+        # Matches: "reduced by **13.89%**"
+        q_current_match = re.search(r"reduced\s+by\s+\*\*([\d.]+)\s*%\*\*", content_text, re.IGNORECASE)
 
         # Validate that basic matching succeeded
         if not all([e_lvl_match, q_lvl_match, e_current_match, q_current_match]):
             raise ValueError(
-                f"Missing fields! Found matches -> "
+                f"Parsing failed. Matches -> "
                 f"E Lvl: {bool(e_lvl_match)}, Q Lvl: {bool(q_lvl_match)}, "
                 f"E %: {bool(e_current_match)}, Q %: {bool(q_current_match)}"
             )
 
-        # Establish current base status values
+        # Assign clean numerical values
         lvl_E = int(e_lvl_match.group(1))
         lvl_Q = int(q_lvl_match.group(1))
         E = float(e_current_match.group(1)) / 100
         Q = float(q_current_match.group(1)) / 100
 
-        # 3. Parse incremental upgrades (+0.15% or similar metrics)
-        # Looks for things like "+0.15%" or "+ 0.15 %" in the text block
+        # 4. Extract increment values (+0.16% and +0.2% style lines)
         e_inc_match = re.search(r"Efficiency.*?\+.*?([\d.]+)", content_text, re.DOTALL | re.IGNORECASE)
         q_inc_match = re.search(r"Quality.*?\+.*?([\d.]+)", content_text, re.DOTALL | re.IGNORECASE)
         
-        e_inc = float(e_inc_match.group(1)) / 100 if e_inc_match else 0.0015
-        q_inc = float(q_inc_match.group(1)) / 100 if q_inc_match else 0.0021
+        e_inc = float(e_inc_match.group(1)) / 100 if e_inc_match else 0.0016
+        q_inc = float(q_inc_match.group(1)) / 100 if q_inc_match else 0.0020
 
-        # 4. Step-by-Step Level Simulation Loop
+        # 5. Step-by-Step Level Simulation Loop
         sim_lvl_E = lvl_E
         sim_lvl_Q = lvl_Q
         sim_E = E
@@ -87,8 +88,8 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
                     sim_Q += q_inc
                     sim_lvl_Q += 1
 
-        # 5. Group consecutive matching targets together and sum up their coin cost
-        first_target = simulation_steps[0][0]
+        # 6. Group consecutive matching targets together and sum up their coin cost
+        first_target = simulation_steps[0][0] if simulation_steps else "Quality"
         total_coins_needed = 0
         levels_to_buy = 0
 
@@ -99,7 +100,7 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
             else:
                 break
 
-        # 6. Formulate final report layout
+        # 7. Formulate final report layout
         stat_emoji = "♻️ Efficiency" if first_target == "Efficiency" else "💎 Quality"
         color = discord.Color.green() if first_target == "Efficiency" else discord.Color.blue()
         
