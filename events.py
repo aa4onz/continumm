@@ -1,7 +1,7 @@
 import time
 from variables import *
 from utils import deadline, score_up, race_up, get_main
-import task, role
+import task, role, composter
 from discord.ext import commands 
 from discord import app_commands  
 from apscheduler.triggers.interval import IntervalTrigger
