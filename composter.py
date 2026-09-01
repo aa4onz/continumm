@@ -6,46 +6,60 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
     Parses the composter embed and simulates level upgrades step-by-step
     to tell the user exactly how many total coins to spend on the optimal stat.
     """
-    content_text = f"{embed.title or ''}\n{embed.description or ''}"
+    # 1. Gather all possible text sources from the embed
+    text_pieces = [
+        embed.title or "",
+        embed.description or ""
+    ]
     for field in embed.fields:
-        content_text += f"\n{field.name}: {field.value}"
+        text_pieces.append(f"{field.name}: {field.value}")
+    
+    # Flatten everything into a single searchable text blob
+    content_text = "\n".join(text_pieces)
 
     try:
-        # 1. Parse current feature values from the embed text layout
-        e_current_match = re.search(r"([\d.]+)%\s*chance", content_text, re.IGNORECASE)
-        q_current_match = re.search(r"reduced by\s*([\d.]+)%", content_text, re.IGNORECASE)
+        # 2. High-compatibility RegEx pattern configurations
+        # Finds integers after terms like "Efficiency Lvl 77" or "Lvl: 77"
+        e_lvl_match = re.search(r"Efficiency\s*(?:Lvl|Level)?[:\s]*(\d+)", content_text, re.IGNORECASE)
+        q_lvl_match = re.search(r"Quality\s*(?:Lvl|Level)?[:\s]*(\d+)", content_text, re.IGNORECASE)
 
-        # Parse current level positions
-        e_lvl_match = re.search(r"Efficiency Lvl\s*(\d+)", content_text, re.IGNORECASE)
-        q_lvl_match = re.search(r"Quality Lvl\s*(\d+)", content_text, re.IGNORECASE)
+        # Finds percentages like "20.46%" or "currently 20.46"
+        e_current_match = re.search(r"(?:currently\s*)?([\d.]+)%\s*(?:chance|for|to)", content_text, re.IGNORECASE)
+        q_current_match = re.search(r"(?:reduced\s*by\s*|reduction\s*)?([\d.]+)%", content_text, re.IGNORECASE)
 
-        if not all([e_current_match, q_current_match, e_lvl_match, q_lvl_match]):
-            raise ValueError("Could not find all required Level, Efficiency, or Quality parameters.")
+        # Validate that basic matching succeeded
+        if not all([e_lvl_match, q_lvl_match, e_current_match, q_current_match]):
+            raise ValueError(
+                f"Missing fields! Found matches -> "
+                f"E Lvl: {bool(e_lvl_match)}, Q Lvl: {bool(q_lvl_match)}, "
+                f"E %: {bool(e_current_match)}, Q %: {bool(q_current_match)}"
+            )
 
-        # Establish current base status (converted to absolute decimals)
-        E = float(e_current_match.group(1)) / 100
-        Q = float(q_current_match.group(1)) / 100
+        # Establish current base status values
         lvl_E = int(e_lvl_match.group(1))
         lvl_Q = int(q_lvl_match.group(1))
+        E = float(e_current_match.group(1)) / 100
+        Q = float(q_current_match.group(1)) / 100
 
-        # 2. Parse incremental value bounds (+0.15% -> 0.0015, +0.21% -> 0.0021)
-        e_data = re.search(r"Efficiency.*?\+([\d.]+)", content_text, re.DOTALL | re.IGNORECASE)
-        q_data = re.search(r"Quality.*?\+([\d.]+)", content_text, re.DOTALL | re.IGNORECASE)
+        # 3. Parse incremental upgrades (+0.15% or similar metrics)
+        # Looks for things like "+0.15%" or "+ 0.15 %" in the text block
+        e_inc_match = re.search(r"Efficiency.*?\+.*?([\d.]+)", content_text, re.DOTALL | re.IGNORECASE)
+        q_inc_match = re.search(r"Quality.*?\+.*?([\d.]+)", content_text, re.DOTALL | re.IGNORECASE)
         
-        e_inc = float(e_data.group(1)) / 100 if e_data else 0.0015
-        q_inc = float(q_data.group(1)) / 100 if q_data else 0.0021
+        e_inc = float(e_inc_match.group(1)) / 100 if e_inc_match else 0.0015
+        q_inc = float(q_inc_match.group(1)) / 100 if q_inc_match else 0.0021
 
-        # 3. Step-by-Step Level Simulation Loop
+        # 4. Step-by-Step Level Simulation Loop
         sim_lvl_E = lvl_E
         sim_lvl_Q = lvl_Q
         sim_E = E
         sim_Q = Q
         
         simulation_steps = []
-        max_simulation_steps = 40  # Look ahead steps to find the streak length
+        max_simulation_steps = 40  
 
         for _ in range(max_simulation_steps):
-            # Calculate individual level costs using your exact custom equations
+            # Evaluate exact level costs using custom non-linear models
             cost_E = (sim_lvl_E ** 2) // 450 + (2 * sim_lvl_E) + 35
             cost_Q = (sim_lvl_Q ** 2) // 19 + (8 * sim_lvl_Q) + 42
 
@@ -55,17 +69,14 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
             m = (sim_Q * R_E) - (sim_E * R_Q)
 
             # --- DECISION ENGINE LOGIC ---
-            # If Efficiency is definitively better
             if m > 1e-11:
                 simulation_steps.append(("Efficiency", cost_E))
                 sim_E += e_inc
                 sim_lvl_E += 1
-            # If Quality is definitively better    
             elif m < -1e-11:
                 simulation_steps.append(("Quality", cost_Q))
                 sim_Q += q_inc
                 sim_lvl_Q += 1
-            # If m is exactly 0 (Perfect Tie) -> Pick the cheaper option first
             else:
                 if cost_E <= cost_Q:
                     simulation_steps.append(("Efficiency", cost_E))
@@ -76,7 +87,7 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
                     sim_Q += q_inc
                     sim_lvl_Q += 1
 
-        # 4. Group consecutive matching targets together and sum up their coin cost
+        # 5. Group consecutive matching targets together and sum up their coin cost
         first_target = simulation_steps[0][0]
         total_coins_needed = 0
         levels_to_buy = 0
@@ -88,7 +99,7 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
             else:
                 break
 
-        # 5. Formulate final report design
+        # 6. Formulate final report layout
         stat_emoji = "♻️ Efficiency" if first_target == "Efficiency" else "💎 Quality"
         color = discord.Color.green() if first_target == "Efficiency" else discord.Color.blue()
         
