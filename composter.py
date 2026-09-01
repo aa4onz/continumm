@@ -105,13 +105,15 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
         
         report = discord.Embed(
             title="🌳WHERE U SHOULD SPEND TREE COINS",
-            description=f"u should spend exactly **{total_coins_needed:,} coins** on **{stat_emoji}** next.",
+            description=f"u should spend **{total_coins_needed:,} coins** on **{stat_emoji}** next.",
             color=color
         )
-        
+        lv = level
+        if levels_to_buy >1:
+            lv = levels
         report.add_field(
             name="INVESTMENT PLAN", 
-            value=f"this amount will upgrade your **{first_target}** by **+{levels_to_buy} levels** before it's time to swap.", 
+            value=f"this amount will upgrade your **{first_target}** by **{levels_to_buy} {lv}** before it's time to swap.", 
             inline=False
         )
         report.add_field(
