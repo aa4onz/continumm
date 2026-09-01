@@ -104,19 +104,19 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
         color = discord.Color.green() if first_target == "Efficiency" else discord.Color.blue()
         
         report = discord.Embed(
-            title="🌳 Composter Coin Investment Target",
-            description=f"You should spend exactly **{total_coins_needed:,} coins** on **{stat_emoji}** next.",
+            title="🌳WHERE U SHOULD SPEND TREE COINS",
+            description=f"u should spend exactly **{total_coins_needed:,} coins** on **{stat_emoji}** next.",
             color=color
         )
         
         report.add_field(
-            name="Investment Action Plan", 
-            value=f"This amount will upgrade your **{first_target}** by **+{levels_to_buy} level(s)** before it's time to swap focus to the other stat.", 
+            name="INVESTMENT PLAN", 
+            value=f"this amount will upgrade your **{first_target}** by **+{levels_to_buy} levels** before it's time to swap.", 
             inline=False
         )
         report.add_field(
-            name="Current Levels", 
-            value=f"♻️ Efficiency: **Lvl {lvl_E}**\n💎 Quality: **Lvl {lvl_Q}**", 
+            name="current level", 
+            value=f"♻️ Efficiency: ** {lvl_E}**\n💎 Quality: **{lvl_Q}**", 
             inline=True
         )
         
@@ -124,7 +124,7 @@ def parse_and_optimize(embed: discord.Embed) -> discord.Embed:
 
     except Exception as error:
         error_embed = discord.Embed(
-            title="❌ Composter Parser Error",
+            title="Composter Parser Error",
             description="Failed to automatically run simulations over the provided layout bounds.",
             color=discord.Color.red()
         )
