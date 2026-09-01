@@ -34,6 +34,12 @@ async def app_error(interaction, error):
     print(f"[ERROR] Slash exception: {error}")
 
 async def message(msg):
+    if msg.embeds:
+        for embed in msg.embeds:
+            if embed.title and "Community Composter" in embed.title:
+                result_embed = composter.parse_and_optimize(embed)
+                await msg.reply(embed=result_embed)
+                return 
     cid = str(msg.channel.id)
 
     if cid == c3 and msg.embeds and msg.author.id in [b1, b2]:
