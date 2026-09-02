@@ -16,7 +16,7 @@ async def check_winners():
             winner_id = top.get('_id')
             
             # Formats your exact phrase with the native member highlight link
-            msg_text = f"time moving so fast! 14days up! <@{winner_id}> has won a save slot! happy counting 🎉"
+            msg_text = f" <@{winner_id}> has won a save slot! happy counting 🎉"
             await ch_obj.send(msg_text)
             
     db_lb.delete_many({})
