@@ -20,10 +20,10 @@ async def exec(tgt):
             "correct_counts": row.get("all_time_counts", 0)  # Map to correct_counts for menus.py compatibility
         })
     
-    # 3. Build the pagination structure using your matching engine framework
+    # 3. FIX: Changed title header text string to trigger the menu filter perfectly!
     v = menus.create_paginator(
         v=formatted_data, 
-        h="server leaderboard", 
+        h="server leaderboard (all time)", 
         c=d.Color.green(), 
         is_lb=True, 
         author_id=uid
