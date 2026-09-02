@@ -20,7 +20,7 @@ def register():
     async def s_lb(i): await lb.exec(i)
 
     @bot.tree.command(name='slb', description='view the server all time leaderboard')  # 👈 FIXED: Activated as /slb
-    async def s_slb(i): await serverlb.exec(i)
+    async def s_slb(i): await slb.exec(i)
     
     # --- ADMIN LOCKED COMMANDS (HIDDEN FROM MEMBERS) ---
     @bot.tree.command(name='lock', description='lock the counting channel')
