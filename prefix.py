@@ -8,7 +8,7 @@ def register():
     bot.add_command(c.Command(pace.exec, name='pace'))
     bot.add_command(c.Command(topruns.exec, name='topruns'))
     bot.add_command(c.Command(lb.exec, name='lb'))
-    bot.add_command(c.Command(serverlb.exec, name='slb'))
+    bot.add_command(c.Command(slb.exec, name='slb'))
     
     # --- ADMIN LOCKED TEXT COMMANDS ---
     cmd_alt = c.Command(alt.exec, name='alt')
