@@ -23,7 +23,7 @@ async def exec(tgt):
     # 3. Build the pagination structure using your matching engine framework
     v = menus.create_paginator(
         v=formatted_data, 
-        h="server leaderboard(all time)", 
+        h="server leaderboard", 
         c=d.Color.green(), 
         is_lb=True, 
         author_id=uid
