@@ -5,19 +5,27 @@ async def check_winners():
     dl = deadline().get("end_date")
     if dt.now(tz.utc) < (dl.replace(tzinfo=tz.utc) if dl.tzinfo is None else dl): return
     
+    # Safely select the true top player while excluding your ID
     top = db_lb.find_one(
         {"_id": {"$ne": "1399789300387942621"}}, 
         sort=[("correct_counts", -1)]
     )
     
-    for cid in ch:
-        ch_obj = bot.get_channel(int(cid))
-        if ch_obj and top and top.get("correct_counts", 0) > 0:
+    if top and top.get("correct_counts", 0) > 0:
+        cmd_channel = bot.get_channel(int(c3))
+        if cmd_channel:
             winner_id = top.get('_id')
+            msg_text = f"<@{winner_id}> has won a save slot! happy counting 🎉"
             
-            # Formats your exact phrase with the native member highlight link
-            msg_text = f" <@{winner_id}> has won a save slot! happy counting 🎉"
-            await ch_obj.send(msg_text)
+            # 1. Dispatch the text message straight to c3
+            sent_msg = await cmd_channel.send(msg_text)
             
+            # 2. Automatically pin the message to the top of the channel
+            try:
+                await sent_msg.pin()
+            except Exception as e:
+                print(f"[ERROR] Failed to pin milestone message: {e}")
+            
+    # Reset tournament databases and update target countdown timestamp for next 14-day loop
     db_lb.delete_many({})
     db_sys.update_one({"_id": "global_tournament"}, {"$set": {"end_date": dt.now(tz.utc) + td(days=14)}})
