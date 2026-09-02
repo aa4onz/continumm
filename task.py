@@ -11,6 +11,24 @@ async def check_winners():
         sort=[("correct_counts", -1)]
     )
     
+    # --- NEW: FIRST GAME SET LOGIC ---
+    try:
+        all_active_players = list(db_lb.find())
+        for player in all_active_players:
+            uid = player.get("_id")
+            period_counts = player.get("correct_counts", 0)
+            
+            if period_counts > 0:
+                # Overwrites/sets the score directly so it matches game 1 exactly
+                db_alltime.update_one(
+                    {"_id": uid},
+                    {"$set": {"all_time_counts": period_counts}},
+                    upsert=True
+                )
+    except Exception as e:
+        print(f"[ERROR] Failed to set all-time scores: {e}")
+    # ---------------------------------
+    
     if top and top.get("correct_counts", 0) > 0:
         cmd_channel = bot.get_channel(int(c3))
         if cmd_channel:
