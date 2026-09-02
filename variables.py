@@ -27,6 +27,7 @@ db_sys = db["system_state"]
 db_rc  = db["active_races"]
 db_top = db["top_races"]
 db_alt = db["account_links"]
+db_alltime = db["alltime_leaderboard"] 
 db_cn = db["custom_names"] 
 
 
