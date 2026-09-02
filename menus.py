@@ -97,24 +97,26 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                 
         emb.description = "\n".join(lines)
         if is_lb:
-            ed = deadline()["end_date"].replace(tzinfo=tz.utc) if deadline()["end_date"].tzinfo is None else deadline()["end_date"]
-            diff = ed - dt.now(tz.utc)
-            
-            # Calculates accurate breakdown variables for high-density tracking outputs
-            total_seconds = max(0, int(diff.total_seconds()))
-            days = total_seconds // 86400
-            hours = (total_seconds % 86400) // 3600
-            minutes = (total_seconds % 3600) // 60
-            
-            # Displays precise human-readable hours and minutes if remaining time is under 1 day
-            if days > 0:
-                time_rem_str = f"{days}d {hours}h"
-            elif hours > 0:
-                time_rem_str = f"{hours}h {minutes}m"
+            # FIX: If it is the All-Time leaderboard, show NOTHING except page numbers
+            if "all time" in str(h).lower():
+                emb.set_footer(text=f"Page {view.p}/{view.pages}")
             else:
-                time_rem_str = f"{minutes}m"
+                ed = deadline()["end_date"].replace(tzinfo=tz.utc) if deadline()["end_date"].tzinfo is None else deadline()["end_date"]
+                diff = ed - dt.now(tz.utc)
                 
-            emb.set_footer(text=f"Page {view.p}/{view.pages} • Rem: {time_rem_str}")
+                total_seconds = max(0, int(diff.total_seconds()))
+                days = total_seconds // 86400
+                hours = (total_seconds % 86400) // 3600
+                minutes = (total_seconds % 3600) // 60
+                
+                if days > 0:
+                    time_rem_str = f"{days}d {hours}h"
+                elif hours > 0:
+                    time_rem_str = f"{hours}h {minutes}m"
+                else:
+                    time_rem_str = f"{minutes}m"
+                    
+                emb.set_footer(text=f"Page {view.p}/{view.pages} • Rem: {time_rem_str}")
         else:
             emb.set_footer(text=f"Page {view.p}/{view.pages}")
         return emb
