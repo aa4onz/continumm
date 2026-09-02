@@ -4,7 +4,6 @@ from utils import deadline, score_up, race_up, get_main
 import task, role, composter
 from discord.ext import commands 
 from discord import app_commands  
-import migrate
 from apscheduler.triggers.interval import IntervalTrigger
 
 async def ready():
@@ -12,7 +11,6 @@ async def ready():
     deadline()
     for row in list(db_alt.find()): 
         alts[str(row["_id"])] = str(row["main_id"])
-    bot.loop.create_task(migrate.auto_run_migration())
     cron.add_job(task.check_winners, IntervalTrigger(hours=1))
     cron.start()
     await bot.tree.sync()
