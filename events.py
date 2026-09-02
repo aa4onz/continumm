@@ -4,6 +4,7 @@ from utils import deadline, score_up, race_up, get_main
 import task, role, composter
 from discord.ext import commands 
 from discord import app_commands  
+import migrate
 from apscheduler.triggers.interval import IntervalTrigger
 
 async def ready():
