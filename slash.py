@@ -1,6 +1,6 @@
 from variables import *
 from discord import app_commands
-import run, end, pace, topruns, lb, lock, alt, reset, cn
+import run, end, pace, topruns, lb, lock, alt, reset, cn, slb
 
 def register():
     # --- PUBLIC COMMANDS ---
@@ -18,6 +18,9 @@ def register():
     
     @bot.tree.command(name='lb', description='view the 14day server leaderboard')
     async def s_lb(i): await lb.exec(i)
+
+    @bot.tree.command(name='slb', description='view the server all time leaderboard')  # 👈 FIXED: Activated as /slb
+    async def s_slb(i): await serverlb.exec(i)
     
     # --- ADMIN LOCKED COMMANDS (HIDDEN FROM MEMBERS) ---
     @bot.tree.command(name='lock', description='lock the counting channel')
