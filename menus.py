@@ -91,7 +91,6 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
                 pace_val = round(item.get('pace', 0.0))
                 db_time = item.get("timestamp")
                 
-                # FIX: Swapped out 'timezone' with your project's short alias 'tz'
                 time_str = f" (<t:{int(db_time.replace(tzinfo=tz.utc).timestamp())}:R>)" if db_time else ""
                 
                 lines.append(f"{r} {txt}, **{pace_val:,}**{time_str}{pin_icon}")
@@ -99,7 +98,23 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
         emb.description = "\n".join(lines)
         if is_lb:
             ed = deadline()["end_date"].replace(tzinfo=tz.utc) if deadline()["end_date"].tzinfo is None else deadline()["end_date"]
-            emb.set_footer(text=f"Page {view.p}/{view.pages} • Rem: {max(0, (ed - dt.now(tz.utc)).days)}d")
+            diff = ed - dt.now(tz.utc)
+            
+            # Calculates accurate breakdown variables for high-density tracking outputs
+            total_seconds = max(0, int(diff.total_seconds()))
+            days = total_seconds // 86400
+            hours = (total_seconds % 86400) // 3600
+            minutes = (total_seconds % 3600) // 60
+            
+            # Displays precise human-readable hours and minutes if remaining time is under 1 day
+            if days > 0:
+                time_rem_str = f"{days}d {hours}h"
+            elif hours > 0:
+                time_rem_str = f"{hours}h {minutes}m"
+            else:
+                time_rem_str = f"{minutes}m"
+                
+            emb.set_footer(text=f"Page {view.p}/{view.pages} • Rem: {time_rem_str}")
         else:
             emb.set_footer(text=f"Page {view.p}/{view.pages}")
         return emb
