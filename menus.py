@@ -175,3 +175,24 @@ def create_paginator(v, h, c, is_lb=False, author_id=None):
     view.add_item(b4)
     view.build_embed = build
     return view
+
+# --- ADDED: Standalone Permanent Administrative Illusion Lock View Panel ---
+class SaveLockView(d.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None) # Persistent listener initialization state
+
+    @d.ui.button(label="Lock Channel", style=d.ButtonStyle.danger, custom_id="admin_save_lock_btn")
+    async def lock_btn(self, it: d.Interaction, button: d.ui.Button):
+        # 1. Verify administrative invocation authenticity filters
+        if not it.user.guild_permissions.administrator:
+            return await it.response.send_message("only for server administrators.", ephemeral=True)
+            
+        await it.response.defer()
+        
+        # 2. Modify component structure properties into a static gray state permanently
+        button.disabled = True
+        button.style = d.ButtonStyle.secondary
+        await it.message.edit(view=self)
+        
+        # 3. Deliver plain text statement indicator to chat stream
+        await it.channel.send("channel locked")
