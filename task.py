@@ -8,7 +8,6 @@ async def check_winners():
     # Cleanly normalize date formats to account for missing time zone markers
     end_time = dl.replace(tzinfo=tz.utc) if dl.tzinfo is None else dl
     
-    # FIX: Change strict window checking to see if current time is GREATER THAN OR EQUAL to deadline
     # This guarantees execution even if the bot is 30 minutes, 5 hours, or days overdue!
     if dt.now(tz.utc) < end_time: 
         return
@@ -21,7 +20,7 @@ async def check_winners():
         sort=[("correct_counts", -1)]
     )
     
-    # --- FIRST GAME SET LOGIC ---
+    # --- FUTURE MATCH ACCUMULATION LOGIC ---
     try:
         all_active_players = list(db_lb.find())
         for player in all_active_players:
@@ -29,13 +28,13 @@ async def check_winners():
             period_counts = player.get("correct_counts", 0)
             
             if period_counts > 0:
-                # Overwrites/sets the score directly so it matches game 1 exactly
+                # FIX: Uses $inc to mathematically add this round's scores on top of past historical stats!
                 db_alltime.update_one(
                     {"_id": uid},
-                    {"$set": {"all_time_counts": period_counts}},
+                    {"$inc": {"all_time_counts": period_counts}},
                     upsert=True
                 )
-        print(f"[SYSTEM] Successfully saved {len(all_active_players)} players' initial scores to All-Time.")
+        print(f"[SYSTEM] Successfully accumulated {len(all_active_players)} players' scores into All-Time.")
     except Exception as e:
         print(f"[ERROR] Failed to save all-time scores: {e}")
     # ---------------------------------
