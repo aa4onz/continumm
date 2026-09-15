@@ -2,7 +2,7 @@ from variables import *
 from utils import deadline
 
 def create_paginator(v, h, c, is_lb=False, author_id=None):
-    view = d.ui.View(timeout=None)
+    view = d.ui.View(timeout=120)
     view.p = 1
     view.pages = max(1, (len(v) + 9) // 10)
 
