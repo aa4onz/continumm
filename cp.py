@@ -3,10 +3,23 @@ import time
 from variables import *
 from utils import ctx_parse
 
-def extract_msg_id(input_str: str) -> int:
-    """Extracts a message ID even if a full discord link is provided."""
-    match = re.search(r"(\d{17,20})\s*$", input_str.strip())
-    return int(match.group(1)) if match else None
+def parse_msg_input(input_str: str):
+    """
+    Parses a message link or raw ID.
+    Returns: (channel_id_int_or_None, message_id_int)
+    """
+    cleaned = input_str.strip()
+    # Check if it's a full discord message link: https://discord.com
+    link_match = re.search(r"channels/\d+/(\d+)/(\d+)\s*$", cleaned)
+    if link_match:
+        return int(link_match.group(1)), int(link_match.group(2))
+    
+    # Otherwise, assume it's a raw message ID
+    id_match = re.search(r"(\d{17,20})\s*$", cleaned)
+    if id_match:
+        return None, int(id_match.group(1))
+        
+    return None, None
 
 def extract_number(content: str) -> int:
     """Extracts the leading number from the message content."""
@@ -20,19 +33,34 @@ async def exec(tgt, arg1: str = None, arg2: str = None):
         msg = "❌ Please provide two message links or IDs!\nExample: `r!cp <msg_link_1> <msg_link_2>`"
         return await (resp.send(msg) if isinstance(tgt, c.Context) else resp.send_message(msg, ephemeral=True))
     
-    id1 = extract_msg_id(arg1)
-    id2 = extract_msg_id(arg2)
+    ch_id1, id1 = parse_msg_input(arg1)
+    ch_id2, id2 = parse_msg_input(arg2)
     
     if not id1 or not id2:
         msg = "❌ Invalid message links or IDs provided."
         return await (resp.send(msg) if isinstance(tgt, c.Context) else resp.send_message(msg, ephemeral=True))
         
     try:
-        msg1 = await chan.fetch_message(id1)
-        msg2 = await chan.fetch_message(id2)
+        # Determine the target channel for message 1
+        target_chan1 = bot.get_channel(ch_id1) if ch_id1 else chan
+        if not target_chan1:
+            target_chan1 = await bot.fetch_channel(ch_id1)
+            
+        # Determine the target channel for message 2
+        target_chan2 = bot.get_channel(ch_id2) if ch_id2 else chan
+        if not target_chan2:
+            target_chan2 = await bot.fetch_channel(ch_id2)
+
+        # Fetch messages using their specific channel origins
+        msg1 = await target_chan1.fetch_message(id1)
+        msg2 = await target_chan2.fetch_message(id2)
     except Exception:
-        msg = "❌ Could not find those messages. Ensure they are in this exact channel."
+        msg = "❌ Could not find those messages. If using raw IDs, ensure they are in this exact channel. Otherwise, use full links."
         return await (resp.send(msg) if isinstance(tgt, c.Context) else resp.send_message(msg, ephemeral=True))
+
+    # Cross-channel tracking: use the channel where the counts originated for history scans
+    # Defaulting to message 1's origin channel if they happen to differ
+    scan_channel = target_chan1 
 
     num1 = extract_number(msg1.content)
     num2 = extract_number(msg2.content)
@@ -62,9 +90,9 @@ async def exec(tgt, arg1: str = None, arg2: str = None):
     unique_players.add(first_msg.author)
     unique_players.add(last_msg.author)
 
-    # FAST SCAN: Only read the first 10 messages right after the start message
+    # FAST SCAN: Only read the first 10 messages right after the start message in its source channel
     try:
-        async for historical_msg in chan.history(after=first_msg, limit=10):
+        async for historical_msg in scan_channel.history(after=first_msg, limit=10):
             if historical_msg.created_at >= last_msg.created_at:
                 break
             if extract_number(historical_msg.content) is not None:
@@ -75,7 +103,6 @@ async def exec(tgt, arg1: str = None, arg2: str = None):
     player_names = [p.name for p in unique_players]
     runners_txt = ", ".join(player_names)
 
-    # Clean text layout instead of an embed
     output_text = (
         f"**partial pace**\n"
         f"Start: `{start_num:,}` | End: `{end_num:,}`\n"
