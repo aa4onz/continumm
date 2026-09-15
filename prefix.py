@@ -1,6 +1,6 @@
 from variables import *
 from discord.ext import commands
-import run, end, pace, topruns, lb, lock, alt, reset, cn, slb
+import run, end, pace, topruns, lb, lock, alt, reset, cn, slb, cp  # 👈 Added cp here
 
 def register():
     bot.add_command(c.Command(run.exec, name='run'))
@@ -9,6 +9,7 @@ def register():
     bot.add_command(c.Command(topruns.exec, name='topruns'))
     bot.add_command(c.Command(lb.exec, name='lb'))
     bot.add_command(c.Command(slb.exec, name='slb'))
+    bot.add_command(c.Command(cp.exec, name='cp'))  # 👈 Added r!cp here
     
     # --- ADMIN LOCKED TEXT COMMANDS ---
     cmd_alt = c.Command(alt.exec, name='alt')
